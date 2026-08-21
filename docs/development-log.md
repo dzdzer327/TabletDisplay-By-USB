@@ -1,0 +1,74 @@
+# 开发日志
+
+## 2026-08-07：阶段一构建基线
+
+- 完成 Windows SDK `10.0.26100.6901` 与 WDK `10.0.26100.6584` 的专用目录安装：`D:\DevTools\WindowsKits`。
+- 完成 Visual Studio Community 2022 的 C++ 工具链安装：`D:\Visual Studio\Community`。
+- 从 Microsoft `Windows-driver-samples` 仓库稀疏检出 `video/IndirectDisplay`，作为不可直接修改的上游验证样例。
+- Visual Studio 当前通道未提供可用的 WDK VSIX 项目模板，标准样例直接构建会找不到 `WindowsUserModeDriver10.0` 工具集。
+- 新增 `windows/driver/LocalWdkToolset.props`：在项目级加载 SDK/WDK 的 UMDF 2.25、IddCx 1.6 头文件和库，不改动全局安装路径。
+- 新增 `windows/driver/Build-IddSample.ps1`：生成 WPP 追踪头文件后，以 MSBuild、`v143` 工具集和本地 WDK 适配层构建上游样例。
+- 已验证 `Debug|x64` 构建成功，输出：
+  - `IddSampleDriver.dll`
+  - `IddSampleApp.exe`
+
+已知构建警告：上游样例的静态分析告警与 `ntstatus.h` 宏重定义警告仍存在；样例并未报错。后续 Tablet Display 自有驱动将逐项消除可控告警。
+
+## 2026-08-07：Tablet Display 驱动骨架
+
+- 从上游样例复制最小 UMDF/IddCx 驱动工程至 `windows/driver/TabletDisplayDriver/`，独立于上游对照样例。
+- 使用产品标识 `Tablet Display`、`Tablet Display Project` 与硬件 ID `Root\TabletDisplayDriver`。
+- 改为只声明一台 EDID-less 虚拟显示器；Windows 由驱动提供模式，而不是引用示例显示器的 EDID。
+- 已报告并限制为 1280×720、1920×1080、1920×1200、2560×1600 的 60Hz 模式；默认首选为 1920×1200。
+- 新增 `windows/driver/Build-TabletDisplayDriver.ps1`，可在当前未提供 WDK VSIX 的 Visual Studio 2022 环境中生成追踪文件并构建驱动。
+- 已验证 `Debug|x64` 构建成功，输出：
+  - `windows/driver/TabletDisplayDriver/x64/Debug/TabletDisplayDriver.dll`
+  - `windows/driver/TabletDisplayDriver/x64/Debug/TabletDisplayDriver.pdb`
+
+已知构建警告：Windows Kit 的 `ntstatus.h` 宏重定义，以及源自 Microsoft 示例的三项静态分析警告；没有编译或链接错误。
+
+## 2026-08-17 至 2026-08-20：手写代码与驱动打包
+
+- 将示例常量 `IDD_SAMPLE_MONITOR_COUNT` 重命名为项目语义明确的 `TABLET_DISPLAY_MAX_MONITOR_COUNT`，并保持最多一台虚拟显示器。
+- 将显示器输出类型从示例的 HDMI 改为 `DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER`，表达“画面经 USB 数据通道传输，不是实体 HDMI 接口”。
+- 为 `CoCreateGuid`、`AvSetMmThreadCharacteristicsW` 返回的句柄和 `IddCxMonitorArrival` 增加结果检查，消除三项来自自有代码路径的静态分析警告。
+- 多次验证 `Debug|x64` 编译成功，生成 `TabletDisplayDriver.dll`；目前剩余输出主要为 Windows Kit 头文件的 `ntstatus.h` 宏重定义提示。
+- 在 INF 中设置开发版本 `DriverVer=08/17/2026,0.1.0.0`。
+- 建立 `windows/driver/package/Debug-x64/`，将驱动安装需要的 INF 与 DLL 从源码/构建目录中分离。
+- 首次运行 `Inf2Cat` 时发现官方示例遗留的 `NT$ARCH$` 只会由完整 WDK 项目打包流程展开；当前手动流程不会替换该占位符，因此目录生成失败。
+- 将 INF 模型节改为 `NTamd64.10.0`，明确面向 Windows 10/11 x64，而不是将最低系统限制为 Windows 11 build 22000。
+- 新增 `windows/driver/Build-DriverPackage.ps1`，统一完成驱动编译、INF/DLL 同步和 CAT 生成，避免手动复制旧文件。
+- 已执行完整打包流程，`Inf2Cat` 报告零错误、零警告，并生成 `TabletDisplayDriver.cat`。
+- 创建当前用户范围的 `Tablet Display Test Certificate` 开发代码签名证书；私钥不可导出，公钥证书保存在 `windows/driver/certificates/`。
+- 新增并执行 `Sign-DriverPackage.ps1`，SignTool 报告 CAT 签名成功，零错误、零警告。
+- 新增 `TabletDisplayController` 软件设备控制程序，硬件 ID 与 INF 中的 `TabletDisplayDriver` 匹配；已验证 `Debug|x64` 编译成功并生成 `TabletDisplayController.exe`。
+- 新增 `Enable-TestSigning.ps1` 和 `Install-TestDriver.ps1`，分别用于显式开启测试签名和将测试证书/驱动包加入系统。两者均要求管理员权限，当前尚未执行。
+- 新增 `Uninstall-TestDriver.ps1` 和 `Disable-TestSigning.ps1`，确保后续系统测试有明确、可重复的驱动/证书/启动配置回滚路径。
+- 已静态解析检查 11 个 PowerShell 脚本，未发现语法错误；驱动三件套和控制程序产物均存在。
+- CAT 的签名者已核对为 `CN=Tablet Display Test Certificate`。在证书尚未导入系统信任区时，PowerShell 显示 `UnknownError` 属于预期状态；安装脚本会先加入本机 Root 与 TrustedPublisher 后再预置驱动。
+- 当前 Codex/PowerShell 会话不是管理员会话，且无法读取 Secure Boot 状态；因此尚未改变启动配置、系统信任区或驱动仓库。
+- 首次执行本机证书信任脚本时，脚本误把 PowerShell `EnhancedKeyUsageList.ObjectId` 当作 .NET `Oid` 对象读取，导致对有效代码签名 EKU 的误判；证书原始 `2.5.29.37` 扩展已确认包含代码签名 OID `1.3.6.1.5.5.7.3.3`，脚本已改为直接解析 X.509 EKU 扩展。
+- 已将 `Tablet Display Test Certificate` 导入本机 `LocalMachine\Root` 与 `LocalMachine\TrustedPublisher`；证书 SHA-1 指纹为 `F3835FDA74526B100140C53AA84C123DAB2F9E5E`，有效期至 2029-08-20。
+- 已执行 `Verify-DriverPackage.ps1`：CAT Authenticode 签名为 `Valid`，INF 与 DLL 均通过指定 CAT 的成员哈希校验。三次 SignTool 验证均为 1 个文件成功、0 警告、0 错误。
+- 当前开发签名未使用时间戳，因此仅适合本机开发；证书到期后需要重新生成证书、CAT 和签名。
+- 本次安全与完整性验证没有安装驱动，也没有修改 Secure Boot、测试签名或其他启动配置。
+- 首次本机可信安装将包成功加入驱动仓库为 `oem38.inf`，Windows 接受本地 Authenticode 签名并将 DLL 复制到 UMDF 目录；创建软件设备时在 `WUDFCoinstaller` 阶段失败，SetupAPI 返回错误 87（参数不正确）。
+- 根因是自定义 WDK 构建桥没有执行标准 StampInf 替换，导致 INF 中保留了 `$UMDFVERSION$` 占位符。已按项目目标将其明确设为 `UmdfLibraryVersion=2.25.0`，并将驱动版本升至 `0.1.0.1`。
+- `Install-LocalTrustedDriver.ps1` 改为只预置驱动包，不再对尚未创建的软件设备使用 PnPUtil `/install`；设备匹配和加载由控制程序创建 SWD 设备时完成。
+- 将修复后的 `0.1.0.1` 包加入驱动仓库为 `oem39.inf`；旧设备最初仍绑定 `oem38.inf / 0.1.0.0`，因此仅重新启动控制程序不足以切换驱动。
+- 对现有 `SWD\\TabletDisplayDriver\\TabletDisplayDriver` 设备应用新版包并重启设备后，驱动状态变为 `Started`，当前安装驱动为 `oem39.inf / 0.1.0.1`。
+- Windows 已枚举出 `DISPLAY\\DEFAULT_MONITOR` 虚拟 Monitor；桌面拓扑出现第二块活动屏幕 `\\\\.\\DISPLAY26`，当前分辨率为 `1920×1200`，位于主屏右侧。
+- 本次成功加载全程保持 Secure Boot 和 Windows 测试签名启动选项不变。该 UMDF 间接显示驱动在本机依靠已加入 Root 与 TrustedPublisher 的开发证书完成信任与完整性校验。
+- `Install-LocalTrustedDriver.ps1` 重新加入 PnPUtil `/install`：没有匹配设备时仍只预置包；已有 Tablet Display 设备时会自动应用更高版本，避免再次停留在旧 INF。
+- 新增 `windows/shared/TabletDisplayFrameStats.h`，定义驱动与控制器共用的本机帧统计结构；它只承载诊断数据，不承载画面像素。
+- 驱动交换链处理线程现在记录运行状态、帧尺寸、累计帧数、首末帧时间及错误码；控制器创建受限的全局共享内存并每秒显示分辨率、FPS 和累计帧数。
+- 驱动版本升至 `0.1.0.2`，重新生成 CAT、签名并验证通过，安装为 `oem40.inf`；设备状态为 `Started`，第二屏重新出现为 `\\\\.\\DISPLAY27`。
+- 取帧探针首先在静态桌面累计收到 49 帧；静止时系统不重复提交未变化画面，符合间接显示交换链的按需更新行为。
+- 在第二屏运行 5 秒颜色动画后，连续 6 个采样窗口分别收到 39、37、39、40、39、40 帧，始终报告 `1920×1200`、运行状态 1、错误码 0。由此确认 `Windows 扩展桌面 → IddCx 交换链 → 驱动取帧线程` 数据路径已经打通。该约 40fps 数值受测试动画的 PowerShell UI 定时器影响，不代表驱动刷新率上限。
+
+## 下一步
+
+1. 在 Windows 显示设置中验证四种分辨率、横竖屏和扩展桌面排列。
+2. 将交换链的 D3D11 纹理接入硬件 H.264 编码器，先把码流保存/解析为本机测试输出。
+3. 建立 Windows 端会话与传输组件，把编码后的访问单元发送给 Android 客户端。
+4. 接入开发期 ADB 端口转发与 Android `MediaCodec` 低延迟解码显示。

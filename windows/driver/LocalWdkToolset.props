@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Local build bridge for WDK installations whose Visual Studio VSIX is unavailable.
+  It is imported after Microsoft.Cpp.props and explicitly references the UMDF and
+  IddCx SDK surfaces needed by the indirect-display sample.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <TabletDisplayWdkRoot Condition="'$(TabletDisplayWdkRoot)' == ''">D:\DevTools\WindowsKits\</TabletDisplayWdkRoot>
+    <TabletDisplayWdkVersion Condition="'$(TabletDisplayWdkVersion)' == ''">10.0.26100.0</TabletDisplayWdkVersion>
+    <WindowsTargetPlatformVersion>$(TabletDisplayWdkVersion)</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Platform)' == 'x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(TabletDisplayWdkRoot)Include\$(TabletDisplayWdkVersion)\shared;$(TabletDisplayWdkRoot)Include\$(TabletDisplayWdkVersion)\um;$(TabletDisplayWdkRoot)Include\$(TabletDisplayWdkVersion)\ucrt;$(TabletDisplayWdkRoot)Include\$(TabletDisplayWdkVersion)\winrt;$(TabletDisplayWdkRoot)Include\wdf\umdf\2.25;$(TabletDisplayWdkRoot)Include\$(TabletDisplayWdkVersion)\um\iddcx\1.6;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_WDF_USER_MODE_DRIVER_;UMDF_DRIVER;UMDF_VERSION_MAJOR=2;UMDF_VERSION_MINOR=25;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(TabletDisplayWdkRoot)Lib\$(TabletDisplayWdkVersion)\um\x64;$(TabletDisplayWdkRoot)Lib\$(TabletDisplayWdkVersion)\um\x64\iddcx\1.6;$(TabletDisplayWdkRoot)Lib\wdf\umdf\x64\2.25;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>IddCxStub.lib;WdfDriverStubUm.lib;d3d11.lib;dxgi.lib;ole32.lib;onecoreuap.lib;mincore.lib;ntdll.lib;avrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

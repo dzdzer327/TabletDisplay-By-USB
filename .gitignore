@@ -1,0 +1,22 @@
+# Visual Studio local state
+.vs/
+**/.vs/
+**/*.user
+**/*.suo
+
+# C/C++ build outputs and generated files
+**/x64/
+**/Debug/
+**/Release/
+**/*.obj
+**/*.pdb
+**/*.lib
+**/*.exp
+**/*.tmh
+
+# Generated driver packages and local test certificates
+/windows/driver/package/
+/windows/driver/certificates/
+
+# Microsoft Windows driver samples are kept as a separate Git repository
+/windows/driver/upstream/
