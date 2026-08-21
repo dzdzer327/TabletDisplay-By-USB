@@ -2,12 +2,14 @@
 
 Windows 10/11 通过 USB 连接 Android 平板的有线扩展显示器项目。
 
-当前仓库已进入**阶段一：Windows 虚拟显示器技术验证**。本阶段只验证 Windows 能够枚举一个可扩展的虚拟显示器，以及 IDD 交换链能够接收桌面帧；暂不包含 Android、ADB、视频编码或输入回传。
+当前仓库已完成 Windows 虚拟显示器和 IDD 交换链取帧验证，并开始建立 Android 10+ 客户端。ADB 与 Android APK 构建环境已经可用；视频编码、USB 码流传输和输入回传仍在开发中。
 
 ## 当前结构
 
 - `windows/driver/TabletDisplayDriver/`：本项目的独立 Windows 间接显示驱动工程。
 - `windows/driver/upstream/`：Microsoft IddSample 上游验证样例，只用于参考和回归对照。
+- `android/TabletDisplayApp/`：Android 10+ 平板客户端工程。
+- `android/*.ps1`：Android 环境检查与 APK 构建入口。
 - `docs/`：阶段验收条件、调试和测试记录。
 - `需求分析/`：原始需求说明。
 
@@ -18,6 +20,8 @@ Windows 10/11 通过 USB 连接 Android 平板的有线扩展显示器项目。
 1. Visual Studio 2022（C++ 桌面开发工作负载）。
 2. Windows SDK 10.0.26100。
 3. WDK 10.0.26100.6584。
+4. Microsoft OpenJDK 17。
+5. Android SDK Platform 36、Build Tools 36.0.0 与 Platform Tools/ADB 37.0.1。
 
 由于当前 Visual Studio 实例没有提供 WDK VSIX 项目模板，本仓库通过 `windows/driver/LocalWdkToolset.props` 在项目级显式引用 UMDF 与 IddCx 构建依赖；不修改 Visual Studio 或 Windows Kits 安装目录。
 
@@ -79,6 +83,32 @@ Set-ExecutionPolicy -Scope Process Bypass
 输出为 `windows/controller/TabletDisplayController/x64/Debug/TabletDisplayController.exe`。驱动成功安装后，运行该程序会创建并保持 Tablet Display 软件设备；按 `X` 退出后设备被移除。
 
 详细的成功判定、回滚和记录格式见 [阶段一清单](docs/phase-1-idd-validation.md)。
+
+## 检查 Android 环境
+
+重新打开 VS Code 或 PowerShell 后，在仓库根目录运行：
+
+```powershell
+.\android\Check-AndroidEnvironment.ps1
+```
+
+脚本会验证 JDK、Android SDK、ADB、编译平台，并列出当前通过 USB 连接的 Android 设备。当前客户端最低支持 API 29（Android 10），编译和目标 API 为 36。
+
+## 构建 Android 客户端
+
+```powershell
+.\android\Build-TabletDisplayApp.ps1
+```
+
+Debug APK 输出到 `android/TabletDisplayApp/app/build/outputs/apk/debug/app-debug.apk`。Gradle 缓存、`local.properties`、构建目录和 APK 已由 Android 工程的 `.gitignore` 排除，不应提交到 Git。
+
+连接并授权一台 Android 平板后，可一键构建、覆盖安装、建立 ADB 视频端口转发并启动应用：
+
+```powershell
+.\android\Deploy-TabletDisplayApp.ps1
+```
+
+Android 应用会全屏显示并在设备回环地址 `127.0.0.1:27183` 等待 H.264 视频流。开发协议见 [Android 视频流协议](docs/android-video-protocol.md)。
 
 ## 许可与来源
 

@@ -66,9 +66,28 @@
 - 取帧探针首先在静态桌面累计收到 49 帧；静止时系统不重复提交未变化画面，符合间接显示交换链的按需更新行为。
 - 在第二屏运行 5 秒颜色动画后，连续 6 个采样窗口分别收到 39、37、39、40、39、40 帧，始终报告 `1920×1200`、运行状态 1、错误码 0。由此确认 `Windows 扩展桌面 → IddCx 交换链 → 驱动取帧线程` 数据路径已经打通。该约 40fps 数值受测试动画的 PowerShell UI 定时器影响，不代表驱动刷新率上限。
 
+## 2026-08-21：Android SDK、ADB 与构建环境
+
+- 以解压方式安装 Microsoft OpenJDK `17.0.20.1` 至 `D:\DevTools\Java`，不与 Windows SDK/WDK 目录混放。
+- 安装 Google Android Command-line Tools 至 `D:\DevTools\Android\Sdk`；初始 ZIP 的 SHA-256 与 Android 官网公布的 `90ae805d...01fb04a` 一致。
+- 安装并验证 Platform Tools/ADB `37.0.1`、Android Platform 35/36、Build Tools 35.0.1/36.0.0。
+- 在当前用户环境中设置 `JAVA_HOME`、`ANDROID_HOME`、`ANDROID_SDK_ROOT`，并将 Java、ADB 和 Android CLI 加入用户 `Path`。
+- 通过官方 Android CLI 模板创建 `android/TabletDisplayApp`，应用 ID 为 `com.example.tabletdisplay`，最低 API 29（Android 10），编译/目标 API 36，使用 AGP 9.0.1、Gradle 9.1 和 Kotlin 2.3.20。
+- 因本机网络无法访问 Gradle 官方地址跳转的 GitHub，首次 Gradle 分发包从华为镜像下载，并使用 Wrapper 内置的官方 SHA-256 `a17ddd85...86c806` 严格验证；项目中的 Wrapper 地址仍保留 Gradle 官方地址。
+- 首次执行 `assembleDebug` 成功，36 个任务全部完成；生成约 30 MB 的 `app-debug.apk`，AAPT 验证应用名为 `Tablet Display`、`minSdkVersion=29`、`targetSdkVersion=36`。
+- Android CLI 原地从 Command-line Tools 22 更新到 23 时一度受 Windows 自身文件占用影响；更新包已由 SDK 管理器完成下载和校验，随后通过备份切换方式安装为 23.0，并再次构建 APK 成功。构建仍会输出一条 SDK XML 版本兼容提示，但不影响 36 个任务完成或 APK 生成。
+- 新增 `android/Check-AndroidEnvironment.ps1` 和 `android/Build-TabletDisplayApp.ps1`，用于一键检查环境和构建 APK。
+- 华为 DBR-W10 平板已通过 ADB 授权，系统为 Android 12 / API 31；Debug APK 已成功覆盖安装并由 ADB 启动。
+- 将模板 `Hello Android` 首页替换为全屏黑色 `SurfaceView`，保持屏幕常亮并隐藏系统栏；未收到视频时显示“等待电脑画面”和开发端口。
+- 新增 `H264StreamReceiver`：只在 Android 回环地址 `127.0.0.1:27183` 监听，解析带宽高、时间戳和标志位的定长包头，将 H.264 配置/访问单元送入硬件 `MediaCodec` 并直接渲染至 Surface。
+- 新增 `docs/android-video-protocol.md`，固定开发期 v1 的 32 字节大端序包头、8 MiB 负载限制以及配置、关键帧、流结束标志。
+- 已建立并核对 ADB `tcp:27183 → tcp:27183` 转发；Android 应用进程正常、无崩溃日志，设备截图确认显示“等待电脑画面”。
+- 用户已在平板实机确认当前界面显示“等待电脑画面 / ADB 视频端口：27183”，Android 客户端部署与等待连接状态通过验收。
+- 新增 `android/Deploy-TabletDisplayApp.ps1`，统一完成 Debug 构建、ADB 覆盖安装、端口转发和应用启动。
+
 ## 下一步
 
 1. 在 Windows 显示设置中验证四种分辨率、横竖屏和扩展桌面排列。
 2. 将交换链的 D3D11 纹理接入硬件 H.264 编码器，先把码流保存/解析为本机测试输出。
-3. 建立 Windows 端会话与传输组件，把编码后的访问单元发送给 Android 客户端。
-4. 接入开发期 ADB 端口转发与 Android `MediaCodec` 低延迟解码显示。
+3. 将 Android 模板页面替换为适合低延迟显示的 `SurfaceView`，接入 `MediaCodec` H.264 解码骨架。
+4. 建立 Windows 端会话与传输组件，通过开发期 ADB 端口转发把编码访问单元发送给 Android 客户端。
