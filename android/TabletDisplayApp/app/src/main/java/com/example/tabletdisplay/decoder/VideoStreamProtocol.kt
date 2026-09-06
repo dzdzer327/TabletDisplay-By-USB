@@ -10,6 +10,7 @@ object VideoStreamProtocol {
   const val FLAG_CODEC_CONFIG = 1
   const val FLAG_KEY_FRAME = 1 shl 1
   const val FLAG_END_OF_STREAM = 1 shl 2
+  const val FLAG_CURSOR = 1 shl 3
 }
 
 data class VideoPacket(

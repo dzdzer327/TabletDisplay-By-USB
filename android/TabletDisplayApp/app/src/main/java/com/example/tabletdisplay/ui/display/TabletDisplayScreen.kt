@@ -26,17 +26,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.tabletdisplay.decoder.H264StreamReceiver
 import com.example.tabletdisplay.decoder.ReceiverStatus
+import com.example.tabletdisplay.input.TouchInputSender
 
 @Composable
 fun TabletDisplayScreen(modifier: Modifier = Modifier) {
   var status by remember { mutableStateOf<ReceiverStatus>(ReceiverStatus.Starting) }
   val mainHandler = remember { Handler(Looper.getMainLooper()) }
   var receiver by remember { mutableStateOf<H264StreamReceiver?>(null) }
+  val touchInputSender = remember { TouchInputSender() }
 
   DisposableEffect(Unit) {
+    touchInputSender.start()
     onDispose {
       receiver?.stop()
       receiver = null
+      touchInputSender.stop()
     }
   }
 
@@ -44,14 +48,19 @@ fun TabletDisplayScreen(modifier: Modifier = Modifier) {
     AndroidView(
       factory = { context ->
         SurfaceView(context).apply {
+          setOnTouchListener { view, event ->
+            touchInputSender.send(event, view.width, view.height)
+            true
+          }
           holder.addCallback(
             object : SurfaceHolder.Callback {
               override fun surfaceCreated(holder: SurfaceHolder) {
                 receiver?.stop()
                 receiver =
-                  H264StreamReceiver(holder.surface) { newStatus ->
-                      mainHandler.post { status = newStatus }
-                    }
+                  H264StreamReceiver(
+                      surface = holder.surface,
+                      onStatus = { newStatus -> mainHandler.post { status = newStatus } },
+                    )
                     .also { it.start() }
               }
 

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <string>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <winsock2.h>
@@ -35,6 +37,7 @@ using Microsoft::WRL::ComPtr;
 namespace
 {
     constexpr std::uint16_t StreamPort = 27183;
+    constexpr std::uint16_t TouchPort = 27184;
     constexpr std::uint32_t PacketMagic = 0x54445350;
     constexpr std::uint32_t ProtocolVersion = 1;
     constexpr std::uint32_t FlagCodecConfig = 1;
@@ -42,6 +45,14 @@ namespace
     constexpr std::uint32_t TargetFrameRate = 60;
     constexpr std::uint32_t TargetBitRate = 8'000'000;
     constexpr std::size_t MaxAccessUnitSize = 8u * 1024u * 1024u;
+    constexpr std::uint32_t TouchPacketMagic = 0x54444950;
+    constexpr std::uint32_t TouchProtocolVersion = 1;
+    constexpr std::uint32_t TouchNormalizedMaximum = 1'000'000;
+    constexpr std::uint32_t TouchActionDown = 1;
+    constexpr std::uint32_t TouchActionMove = 2;
+    constexpr std::uint32_t TouchActionUp = 3;
+    constexpr std::uint32_t TouchActionCancel = 4;
+    constexpr std::uint32_t MaximumTouchContacts = 10;
 
     class HResultError final : public std::runtime_error
     {
@@ -61,6 +72,71 @@ namespace
             throw HResultError(operation, result);
         }
     }
+
+    class HighResolutionFramePacer
+    {
+    public:
+        explicit HighResolutionFramePacer(std::uint32_t framesPerSecond)
+            : m_Period(std::chrono::nanoseconds(1'000'000'000 / framesPerSecond))
+        {
+            m_Timer = CreateWaitableTimerExW(
+                nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+            if (m_Timer == nullptr)
+            {
+                m_Timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+            }
+        }
+
+        ~HighResolutionFramePacer()
+        {
+            if (m_Timer != nullptr)
+            {
+                CloseHandle(m_Timer);
+            }
+        }
+
+        void Reset()
+        {
+            m_Started = false;
+        }
+
+        void Wait()
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (!m_Started)
+            {
+                m_NextFrame = now;
+                m_Started = true;
+                return;
+            }
+
+            m_NextFrame += m_Period;
+            if (m_NextFrame + m_Period < now)
+            {
+                m_NextFrame = now;
+                return;
+            }
+            if (m_NextFrame <= now || m_Timer == nullptr)
+            {
+                return;
+            }
+
+            const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                m_NextFrame - now).count();
+            LARGE_INTEGER dueTime = {};
+            dueTime.QuadPart = -std::max<LONGLONG>(1, remaining / 100);
+            if (SetWaitableTimer(m_Timer, &dueTime, 0, nullptr, nullptr, FALSE))
+            {
+                WaitForSingleObject(m_Timer, INFINITE);
+            }
+        }
+
+    private:
+        HANDLE m_Timer = nullptr;
+        std::chrono::nanoseconds m_Period;
+        std::chrono::steady_clock::time_point m_NextFrame = {};
+        bool m_Started = false;
+    };
 
     std::uint64_t HostToNetwork64(std::uint64_t value)
     {
@@ -265,6 +341,309 @@ namespace
         SOCKET m_Socket = INVALID_SOCKET;
     };
 
+    class TouchInputServer
+    {
+    public:
+        using StatusCallback = std::function<void(bool, std::uint64_t, LONG)>;
+
+        TouchInputServer(
+            const RECT& displayRectangle,
+            const std::atomic_bool& applicationStop,
+            StatusCallback callback)
+            : m_DisplayRectangle(displayRectangle),
+              m_ApplicationStop(applicationStop),
+              m_Callback(std::move(callback)),
+              m_Thread([this]() { Run(); })
+        {
+        }
+
+        ~TouchInputServer()
+        {
+            m_LocalStop = true;
+            if (m_Thread.joinable())
+            {
+                m_Thread.join();
+            }
+        }
+
+        TouchInputServer(const TouchInputServer&) = delete;
+        TouchInputServer& operator=(const TouchInputServer&) = delete;
+
+    private:
+        struct LastContact
+        {
+            POINT Point = {};
+            UINT32 Pressure = 512;
+        };
+
+        bool ShouldStop() const
+        {
+            return m_LocalStop || m_ApplicationStop;
+        }
+
+        static std::uint32_t ReadNetworkUInt32(const std::uint8_t* bytes)
+        {
+            std::uint32_t value = 0;
+            std::memcpy(&value, bytes, sizeof(value));
+            return ntohl(value);
+        }
+
+        bool ReadExact(SOCKET client, std::uint8_t* destination, std::size_t size)
+        {
+            while (size != 0 && !ShouldStop())
+            {
+                const int requested = static_cast<int>(std::min<std::size_t>(size, 64 * 1024));
+                const int received = recv(client, reinterpret_cast<char*>(destination), requested, 0);
+                if (received > 0)
+                {
+                    destination += received;
+                    size -= static_cast<std::size_t>(received);
+                    continue;
+                }
+                if (received == 0)
+                {
+                    return false;
+                }
+                const int error = WSAGetLastError();
+                if (error == WSAETIMEDOUT || error == WSAEWOULDBLOCK)
+                {
+                    continue;
+                }
+                return false;
+            }
+            return size == 0;
+        }
+
+        POINT ToDesktopPoint(std::uint32_t normalizedX, std::uint32_t normalizedY) const
+        {
+            const LONG width = std::max<LONG>(1, m_DisplayRectangle.right - m_DisplayRectangle.left);
+            const LONG height = std::max<LONG>(1, m_DisplayRectangle.bottom - m_DisplayRectangle.top);
+            POINT point = {};
+            point.x = m_DisplayRectangle.left + static_cast<LONG>(
+                (static_cast<std::uint64_t>((std::min)(normalizedX, TouchNormalizedMaximum)) *
+                 static_cast<std::uint64_t>(width - 1)) /
+                TouchNormalizedMaximum);
+            point.y = m_DisplayRectangle.top + static_cast<LONG>(
+                (static_cast<std::uint64_t>((std::min)(normalizedY, TouchNormalizedMaximum)) *
+                 static_cast<std::uint64_t>(height - 1)) /
+                TouchNormalizedMaximum);
+            return point;
+        }
+
+        POINTER_TOUCH_INFO MakeTouchInfo(
+            UINT32 pointerId,
+            UINT32 action,
+            const POINT& point,
+            UINT32 pressure) const
+        {
+            POINTER_TOUCH_INFO touch = {};
+            touch.pointerInfo.pointerType = PT_TOUCH;
+            touch.pointerInfo.pointerId = pointerId;
+            touch.pointerInfo.ptPixelLocation = point;
+            switch (action)
+            {
+            case TouchActionDown:
+                touch.pointerInfo.pointerFlags =
+                    POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT;
+                break;
+            case TouchActionUp:
+                touch.pointerInfo.pointerFlags = POINTER_FLAG_UP;
+                break;
+            case TouchActionCancel:
+                touch.pointerInfo.pointerFlags = POINTER_FLAG_UP | POINTER_FLAG_CANCELED;
+                break;
+            default:
+                touch.pointerInfo.pointerFlags =
+                    POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT;
+                break;
+            }
+            touch.touchFlags = TOUCH_FLAG_NONE;
+            touch.touchMask = TOUCH_MASK_CONTACTAREA | TOUCH_MASK_ORIENTATION | TOUCH_MASK_PRESSURE;
+            touch.rcContact = {point.x - 3, point.y - 3, point.x + 3, point.y + 3};
+            touch.orientation = 90;
+            touch.pressure = std::clamp<UINT32>(pressure, 1, 1024);
+            return touch;
+        }
+
+        bool ProcessFrame(SOCKET client)
+        {
+            std::array<std::uint8_t, 16> header = {};
+            if (!ReadExact(client, header.data(), header.size()))
+            {
+                return false;
+            }
+            const std::uint32_t magic = ReadNetworkUInt32(header.data());
+            const std::uint32_t version = ReadNetworkUInt32(header.data() + 4);
+            const std::uint32_t contactCount = ReadNetworkUInt32(header.data() + 8);
+            if (magic != TouchPacketMagic || version != TouchProtocolVersion ||
+                contactCount == 0 || contactCount > MaximumTouchContacts)
+            {
+                m_Callback(true, m_InjectedFrames, ERROR_INVALID_DATA);
+                return false;
+            }
+
+            std::vector<std::uint8_t> contactBytes(static_cast<std::size_t>(contactCount) * 20);
+            if (!ReadExact(client, contactBytes.data(), contactBytes.size()))
+            {
+                return false;
+            }
+
+            std::vector<POINTER_TOUCH_INFO> touches;
+            struct ContactUpdate
+            {
+                UINT32 PointerId;
+                UINT32 Action;
+                POINT Point;
+                UINT32 Pressure;
+            };
+            std::vector<ContactUpdate> updates;
+            touches.reserve(contactCount);
+            updates.reserve(contactCount);
+            for (std::uint32_t index = 0; index < contactCount; ++index)
+            {
+                const auto* contact = contactBytes.data() + static_cast<std::size_t>(index) * 20;
+                const UINT32 pointerId = ReadNetworkUInt32(contact);
+                const UINT32 action = ReadNetworkUInt32(contact + 4);
+                const UINT32 normalizedX = ReadNetworkUInt32(contact + 8);
+                const UINT32 normalizedY = ReadNetworkUInt32(contact + 12);
+                const UINT32 pressure = ReadNetworkUInt32(contact + 16);
+                if (pointerId == 0 || pointerId > 256 ||
+                    action < TouchActionDown || action > TouchActionCancel)
+                {
+                    m_Callback(true, m_InjectedFrames, ERROR_INVALID_DATA);
+                    return false;
+                }
+
+                const POINT point = ToDesktopPoint(normalizedX, normalizedY);
+                const bool contactIsActive = m_ActiveContacts.find(pointerId) != m_ActiveContacts.end();
+                if (action != TouchActionDown && !contactIsActive)
+                {
+                    // Reconnection can begin in the middle of a gesture. Ignore
+                    // it until the next complete DOWN sequence arrives.
+                    continue;
+                }
+                touches.push_back(MakeTouchInfo(pointerId, action, point, pressure));
+                updates.push_back({pointerId, action, point, pressure});
+            }
+
+            if (touches.empty())
+            {
+                return true;
+            }
+
+            if (!InjectTouchInput(static_cast<UINT32>(touches.size()), touches.data()))
+            {
+                const LONG error = static_cast<LONG>(GetLastError());
+                ReleaseActiveContacts();
+                m_Callback(true, m_InjectedFrames, error);
+                return true;
+            }
+
+            for (const auto& update : updates)
+            {
+                if (update.Action == TouchActionUp || update.Action == TouchActionCancel)
+                {
+                    m_ActiveContacts.erase(update.PointerId);
+                }
+                else
+                {
+                    m_ActiveContacts[update.PointerId] = {update.Point, update.Pressure};
+                }
+            }
+            ++m_InjectedFrames;
+            m_Callback(true, m_InjectedFrames, ERROR_SUCCESS);
+            return true;
+        }
+
+        void ReleaseActiveContacts()
+        {
+            if (m_ActiveContacts.empty())
+            {
+                return;
+            }
+            std::vector<POINTER_TOUCH_INFO> touches;
+            touches.reserve(m_ActiveContacts.size());
+            for (const auto& [pointerId, contact] : m_ActiveContacts)
+            {
+                touches.push_back(MakeTouchInfo(
+                    pointerId, TouchActionCancel, contact.Point, contact.Pressure));
+            }
+            InjectTouchInput(static_cast<UINT32>(touches.size()), touches.data());
+            m_ActiveContacts.clear();
+        }
+
+        void Run()
+        {
+            if (!InitializeTouchInjection(MaximumTouchContacts, TOUCH_FEEDBACK_DEFAULT))
+            {
+                m_Callback(false, 0, static_cast<LONG>(GetLastError()));
+                return;
+            }
+
+            SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (listener == INVALID_SOCKET)
+            {
+                m_Callback(false, 0, static_cast<LONG>(WSAGetLastError()));
+                return;
+            }
+
+            sockaddr_in address = {};
+            address.sin_family = AF_INET;
+            address.sin_port = htons(TouchPort);
+            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            BOOL reuseAddress = TRUE;
+            setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+                       reinterpret_cast<const char*>(&reuseAddress), sizeof(reuseAddress));
+            if (bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR ||
+                listen(listener, 1) == SOCKET_ERROR)
+            {
+                const LONG error = static_cast<LONG>(WSAGetLastError());
+                closesocket(listener);
+                m_Callback(false, 0, error);
+                return;
+            }
+
+            while (!ShouldStop())
+            {
+                fd_set readSet;
+                FD_ZERO(&readSet);
+                FD_SET(listener, &readSet);
+                timeval timeout = {0, 200'000};
+                const int ready = select(0, &readSet, nullptr, nullptr, &timeout);
+                if (ready <= 0)
+                {
+                    continue;
+                }
+
+                SOCKET client = accept(listener, nullptr, nullptr);
+                if (client == INVALID_SOCKET)
+                {
+                    continue;
+                }
+                DWORD receiveTimeout = 200;
+                setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                           reinterpret_cast<const char*>(&receiveTimeout), sizeof(receiveTimeout));
+                m_Callback(true, m_InjectedFrames, ERROR_SUCCESS);
+                while (!ShouldStop() && ProcessFrame(client))
+                {
+                }
+                ReleaseActiveContacts();
+                closesocket(client);
+                m_Callback(false, m_InjectedFrames, ERROR_SUCCESS);
+            }
+
+            closesocket(listener);
+        }
+
+        RECT m_DisplayRectangle = {};
+        const std::atomic_bool& m_ApplicationStop;
+        StatusCallback m_Callback;
+        std::atomic_bool m_LocalStop = false;
+        std::uint64_t m_InjectedFrames = 0;
+        std::unordered_map<UINT32, LastContact> m_ActiveContacts;
+        std::thread m_Thread;
+    };
+
     struct SelectedOutput
     {
         ComPtr<IDXGIAdapter1> Adapter;
@@ -415,8 +794,9 @@ namespace
             InitializeVideoProcessor();
         }
 
-        HRESULT AcquireNv12(std::vector<std::uint8_t>& result)
+        HRESULT AcquireNv12(ComPtr<ID3D11Texture2D>& result)
         {
+            result.Reset();
             DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
             ComPtr<IDXGIResource> resource;
             HRESULT status = m_Duplication->AcquireNextFrame(100, &frameInfo, &resource);
@@ -457,36 +837,47 @@ namespace
             D3D11_VIDEO_PROCESSOR_STREAM stream = {};
             stream.Enable = TRUE;
             stream.pInputSurface = inputView.Get();
+            ComPtr<ID3D11Texture2D> nv12Texture;
+            CheckHr(m_Device->CreateTexture2D(&m_Nv12Description, nullptr, &nv12Texture),
+                    "Create zero-copy NV12 texture");
+            D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputDescription = {};
+            outputDescription.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+            outputDescription.Texture2D.MipSlice = 0;
+            ComPtr<ID3D11VideoProcessorOutputView> outputView;
+            CheckHr(m_VideoDevice->CreateVideoProcessorOutputView(
+                        nv12Texture.Get(), m_ProcessorEnumerator.Get(), &outputDescription,
+                        &outputView),
+                    "Create zero-copy NV12 output view");
             CheckHr(m_VideoContext->VideoProcessorBlt(
-                        m_Processor.Get(), m_Nv12OutputView.Get(), 0, 1, &stream),
-                    "VideoProcessorBlt BGRA to NV12");
+                        m_Processor.Get(), outputView.Get(), 0, 1, &stream),
+                    "VideoProcessorBlt BGRA to zero-copy NV12");
 
-            m_Context->CopyResource(m_Nv12Staging.Get(), m_Nv12Texture.Get());
-            D3D11_MAPPED_SUBRESOURCE mapped = {};
-            CheckHr(m_Context->Map(m_Nv12Staging.Get(), 0, D3D11_MAP_READ, 0, &mapped),
-                    "Map NV12 staging texture");
-
-            result.resize(static_cast<std::size_t>(m_Width) * m_Height * 3 / 2);
-            auto* destination = result.data();
-            const auto* source = static_cast<const std::uint8_t*>(mapped.pData);
-            for (UINT row = 0; row < m_Height; ++row)
-            {
-                std::memcpy(destination + static_cast<std::size_t>(row) * m_Width,
-                            source + static_cast<std::size_t>(row) * mapped.RowPitch, m_Width);
-            }
-            destination += static_cast<std::size_t>(m_Width) * m_Height;
-            source += static_cast<std::size_t>(mapped.RowPitch) * m_Height;
-            for (UINT row = 0; row < m_Height / 2; ++row)
-            {
-                std::memcpy(destination + static_cast<std::size_t>(row) * m_Width,
-                            source + static_cast<std::size_t>(row) * mapped.RowPitch, m_Width);
-            }
-            m_Context->Unmap(m_Nv12Staging.Get(), 0);
+            result = std::move(nv12Texture);
             return S_OK;
         }
 
         UINT Width() const { return m_Width; }
         UINT Height() const { return m_Height; }
+        ID3D11Device* Device() const { return m_Device.Get(); }
+
+        HRESULT RecreateDuplication(const SelectedOutput& selected)
+        {
+            m_Duplication.Reset();
+            const HRESULT result = selected.Output->DuplicateOutput(m_Device.Get(), &m_Duplication);
+            if (FAILED(result))
+            {
+                return result;
+            }
+
+            DXGI_OUTDUPL_DESC duplicationDescription = {};
+            m_Duplication->GetDesc(&duplicationDescription);
+            if (duplicationDescription.ModeDesc.Width != m_Width ||
+                duplicationDescription.ModeDesc.Height != m_Height)
+            {
+                return DXGI_ERROR_MODE_CHANGE_IN_PROGRESS;
+            }
+            return S_OK;
+        }
 
     private:
         void InitializeVideoProcessor()
@@ -508,31 +899,16 @@ namespace
             CheckHr(m_VideoDevice->CreateVideoProcessor(m_ProcessorEnumerator.Get(), 0, &m_Processor),
                     "CreateVideoProcessor");
 
-            D3D11_TEXTURE2D_DESC textureDescription = {};
-            textureDescription.Width = m_Width;
-            textureDescription.Height = m_Height;
-            textureDescription.MipLevels = 1;
-            textureDescription.ArraySize = 1;
-            textureDescription.Format = DXGI_FORMAT_NV12;
-            textureDescription.SampleDesc.Count = 1;
-            textureDescription.Usage = D3D11_USAGE_DEFAULT;
-            textureDescription.BindFlags = D3D11_BIND_RENDER_TARGET;
-            CheckHr(m_Device->CreateTexture2D(&textureDescription, nullptr, &m_Nv12Texture),
-                    "Create NV12 texture");
-
-            D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputDescription = {};
-            outputDescription.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-            outputDescription.Texture2D.MipSlice = 0;
-            CheckHr(m_VideoDevice->CreateVideoProcessorOutputView(
-                        m_Nv12Texture.Get(), m_ProcessorEnumerator.Get(), &outputDescription,
-                        &m_Nv12OutputView),
-                    "CreateVideoProcessorOutputView");
-
-            textureDescription.Usage = D3D11_USAGE_STAGING;
-            textureDescription.BindFlags = 0;
-            textureDescription.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-            CheckHr(m_Device->CreateTexture2D(&textureDescription, nullptr, &m_Nv12Staging),
-                    "Create NV12 staging texture");
+            m_Nv12Description = {};
+            m_Nv12Description.Width = m_Width;
+            m_Nv12Description.Height = m_Height;
+            m_Nv12Description.MipLevels = 1;
+            m_Nv12Description.ArraySize = 1;
+            m_Nv12Description.Format = DXGI_FORMAT_NV12;
+            m_Nv12Description.SampleDesc.Count = 1;
+            m_Nv12Description.Usage = D3D11_USAGE_DEFAULT;
+            m_Nv12Description.BindFlags =
+                D3D11_BIND_RENDER_TARGET | D3D11_BIND_VIDEO_ENCODER;
         }
 
         UINT m_Width = 0;
@@ -544,9 +920,7 @@ namespace
         ComPtr<ID3D11VideoContext> m_VideoContext;
         ComPtr<ID3D11VideoProcessorEnumerator> m_ProcessorEnumerator;
         ComPtr<ID3D11VideoProcessor> m_Processor;
-        ComPtr<ID3D11Texture2D> m_Nv12Texture;
-        ComPtr<ID3D11Texture2D> m_Nv12Staging;
-        ComPtr<ID3D11VideoProcessorOutputView> m_Nv12OutputView;
+        D3D11_TEXTURE2D_DESC m_Nv12Description = {};
     };
 
     struct EncodedAccessUnit
@@ -587,7 +961,7 @@ namespace
     class H264Encoder
     {
     public:
-        void Initialize(UINT width, UINT height)
+        void Initialize(UINT width, UINT height, ID3D11Device* d3dDevice)
         {
             m_Width = width;
             m_Height = height;
@@ -596,25 +970,19 @@ namespace
                 CheckHr(ActivateEncoder(false) ? S_OK : MF_E_TOPO_CODEC_NOT_FOUND,
                         "No Media Foundation H.264 encoder was found");
             }
-            Configure();
+            Configure(d3dDevice);
         }
 
         std::vector<EncodedAccessUnit> Encode(
-            const std::vector<std::uint8_t>& nv12,
+            ID3D11Texture2D* nv12,
             std::uint64_t presentationTimeUs)
         {
             ComPtr<IMFSample> sample;
             ComPtr<IMFMediaBuffer> buffer;
             CheckHr(MFCreateSample(&sample), "MFCreateSample input");
-            CheckHr(MFCreateMemoryBuffer(static_cast<DWORD>(nv12.size()), &buffer),
-                    "MFCreateMemoryBuffer input");
-            BYTE* target = nullptr;
-            DWORD maximumLength = 0;
-            CheckHr(buffer->Lock(&target, &maximumLength, nullptr), "Lock input buffer");
-            std::memcpy(target, nv12.data(), nv12.size());
-            buffer->Unlock();
-            CheckHr(buffer->SetCurrentLength(static_cast<DWORD>(nv12.size())),
-                    "Set input buffer length");
+            CheckHr(MFCreateDXGISurfaceBuffer(
+                        __uuidof(ID3D11Texture2D), nv12, 0, FALSE, &buffer),
+                    "MFCreateDXGISurfaceBuffer input");
             CheckHr(sample->AddBuffer(buffer.Get()), "Add input buffer");
             CheckHr(sample->SetSampleTime(static_cast<LONGLONG>(presentationTimeUs * 10)),
                     "Set input sample time");
@@ -652,6 +1020,7 @@ namespace
         const std::vector<std::uint8_t>& CodecConfig() const { return m_CodecConfig; }
         const std::wstring& Name() const { return m_Name; }
         bool IsHardware() const { return m_IsHardware; }
+        bool UsesD3D11Input() const { return m_UsesD3D11Input; }
 
     private:
         bool ActivateEncoder(bool hardware)
@@ -697,7 +1066,7 @@ namespace
             return true;
         }
 
-        void Configure()
+        void Configure(ID3D11Device* d3dDevice)
         {
             ComPtr<IMFAttributes> attributes;
             CheckHr(m_Transform->GetAttributes(&attributes), "Get encoder attributes");
@@ -710,6 +1079,23 @@ namespace
                         "Unlock asynchronous encoder");
                 CheckHr(m_Transform.As(&m_EventGenerator), "Get encoder event generator");
             }
+
+            UINT32 d3d11Aware = FALSE;
+            if (FAILED(attributes->GetUINT32(MF_SA_D3D11_AWARE, &d3d11Aware)) ||
+                d3d11Aware == FALSE)
+            {
+                throw HResultError("H.264 encoder does not support D3D11 surface input",
+                                   MF_E_UNSUPPORTED_D3D_TYPE);
+            }
+            CheckHr(MFCreateDXGIDeviceManager(&m_DeviceResetToken, &m_DeviceManager),
+                    "MFCreateDXGIDeviceManager");
+            CheckHr(m_DeviceManager->ResetDevice(d3dDevice, m_DeviceResetToken),
+                    "Reset encoder D3D11 device");
+            CheckHr(m_Transform->ProcessMessage(
+                        MFT_MESSAGE_SET_D3D_MANAGER,
+                        reinterpret_cast<ULONG_PTR>(m_DeviceManager.Get())),
+                    "Set encoder D3D11 device manager");
+            m_UsesD3D11Input = true;
 
             DWORD inputCount = 0;
             DWORD outputCount = 0;
@@ -906,11 +1292,14 @@ namespace
         DWORD m_OutputStreamId = 0;
         bool m_IsAsync = false;
         bool m_IsHardware = false;
+        bool m_UsesD3D11Input = false;
         long m_NeedInputCount = 0;
+        UINT m_DeviceResetToken = 0;
         std::wstring m_Name;
         std::vector<std::uint8_t> m_CodecConfig;
         ComPtr<IMFTransform> m_Transform;
         ComPtr<IMFMediaEventGenerator> m_EventGenerator;
+        ComPtr<IMFDXGIDeviceManager> m_DeviceManager;
     };
 }
 
@@ -984,6 +1373,19 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
             stats.StatusText = L"Opening " + std::wstring(selected.Description.DeviceName);
         });
 
+        TouchInputServer touchInput(
+            selected.Description.DesktopCoordinates,
+            stopRequested,
+            [this](bool connected, std::uint64_t injectedFrames, LONG error)
+            {
+                m_Impl->ChangeStats([&](auto& stats)
+                {
+                    stats.InputConnected = connected;
+                    stats.InjectedTouchFrames = injectedFrames;
+                    stats.LastError = error;
+                });
+            });
+
         DesktopCapture capture;
         capture.Initialize(selected);
         m_Impl->ChangeStats([&](auto& stats)
@@ -994,20 +1396,21 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
         });
 
         H264Encoder encoder;
-        encoder.Initialize(capture.Width(), capture.Height());
+        encoder.Initialize(capture.Width(), capture.Height(), capture.Device());
         m_Impl->ChangeStats([&](auto& stats)
         {
             stats.HardwareEncoder = encoder.IsHardware();
+            stats.ZeroCopyInput = encoder.UsesD3D11Input();
             stats.EncoderName = encoder.Name();
             stats.StatusText = L"Waiting for Android receiver";
         });
 
         TcpTransport transport;
-        std::vector<std::uint8_t> nv12;
+        ComPtr<ID3D11Texture2D> nv12;
         bool configSent = false;
         const auto startTime = std::chrono::steady_clock::now();
         auto nextConnectAttempt = startTime;
-        auto nextEncodeTime = startTime;
+        HighResolutionFramePacer framePacer(TargetFrameRate);
 
         while (!stopRequested)
         {
@@ -1024,24 +1427,78 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
                 });
             }
 
+            const auto captureStart = std::chrono::steady_clock::now();
             const HRESULT captureResult = capture.AcquireNv12(nv12);
+            const auto captureEnd = std::chrono::steady_clock::now();
+            m_Impl->ChangeStats([&](auto& stats)
+            {
+                stats.LastCaptureTimeUs = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        captureEnd - captureStart).count());
+            });
+
             if (captureResult == DXGI_ERROR_WAIT_TIMEOUT)
             {
+                continue;
+            }
+            if (captureResult == DXGI_ERROR_ACCESS_LOST)
+            {
+                m_Impl->ChangeStats([](auto& stats)
+                {
+                    stats.StatusText = L"Display changed; rebuilding capture session";
+                    stats.LastError = DXGI_ERROR_ACCESS_LOST;
+                });
+
+                HRESULT recreateResult = DXGI_ERROR_ACCESS_LOST;
+                for (int attempt = 0; attempt < 40 && !stopRequested; ++attempt)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    SelectedOutput refreshed;
+                    std::wstring refreshedCandidates;
+                    if (!FindTabletOutput(refreshed, refreshedCandidates))
+                    {
+                        continue;
+                    }
+                    recreateResult = capture.RecreateDuplication(refreshed);
+                    if (SUCCEEDED(recreateResult))
+                    {
+                        selected = std::move(refreshed);
+                        configSent = false;
+                        framePacer.Reset();
+                        m_Impl->ChangeStats([](auto& stats)
+                        {
+                            stats.StatusText = L"Capture session recovered";
+                            stats.LastError = ERROR_SUCCESS;
+                        });
+                        break;
+                    }
+                }
+                if (FAILED(recreateResult))
+                {
+                    CheckHr(recreateResult, "Recreate desktop duplication");
+                }
                 continue;
             }
             CheckHr(captureResult, "Acquire desktop frame");
             m_Impl->ChangeStats([](auto& stats) { ++stats.CapturedFrames; });
 
-            auto encodeTime = std::chrono::steady_clock::now();
-            if (encodeTime < nextEncodeTime)
-            {
-                std::this_thread::sleep_until(nextEncodeTime);
-                encodeTime = std::chrono::steady_clock::now();
-            }
-            nextEncodeTime = encodeTime + std::chrono::microseconds(1'000'000 / TargetFrameRate);
+            // Desktop Duplication usually follows the output refresh rate, but
+            // it can briefly return queued updates faster than 60 Hz. Use a
+            // high-resolution waitable timer to cap those bursts without the
+            // ~31 ms oversleep caused by std::sleep_until on this machine.
+            framePacer.Wait();
+            const auto encodeTime = std::chrono::steady_clock::now();
             const auto presentationTimeUs = static_cast<std::uint64_t>(
                 std::chrono::duration_cast<std::chrono::microseconds>(encodeTime - startTime).count());
-            auto accessUnits = encoder.Encode(nv12, presentationTimeUs);
+            const auto encodeStart = std::chrono::steady_clock::now();
+            auto accessUnits = encoder.Encode(nv12.Get(), presentationTimeUs);
+            const auto encodeEnd = std::chrono::steady_clock::now();
+            m_Impl->ChangeStats([&](auto& stats)
+            {
+                stats.LastEncodeTimeUs = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        encodeEnd - encodeStart).count());
+            });
             for (auto& accessUnit : accessUnits)
             {
                 m_Impl->ChangeStats([](auto& stats) { ++stats.EncodedFrames; });

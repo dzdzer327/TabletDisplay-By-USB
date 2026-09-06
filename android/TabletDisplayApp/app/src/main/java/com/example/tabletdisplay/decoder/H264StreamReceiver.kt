@@ -126,6 +126,13 @@ class H264StreamReceiver(
         while (running.get()) {
           val packet = readPacket(input)
 
+          if (packet.flags and VideoStreamProtocol.FLAG_CURSOR != 0) {
+            // The captured desktop already contains the system cursor on the
+            // tested IDD path. Ignore the legacy overlay packet to avoid a
+            // duplicate Android-drawn pointer.
+            continue
+          }
+
           if (decoder == null || packet.width != decoderWidth || packet.height != decoderHeight) {
             decoder?.stopAndRelease()
             decoder = createDecoder(packet.width, packet.height)

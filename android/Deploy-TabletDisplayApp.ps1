@@ -42,6 +42,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "ADB port forwarding failed with exit code $LASTEXITCODE"
 }
 
+& $adb -s $Serial reverse '--remove' 'tcp:27184' 2>$null
+& $adb -s $Serial reverse 'tcp:27184' 'tcp:27184'
+if ($LASTEXITCODE -ne 0) {
+    throw "ADB touch-input reverse failed with exit code $LASTEXITCODE"
+}
+
 & $adb -s $Serial shell am force-stop com.example.tabletdisplay
 & $adb -s $Serial shell am start -n 'com.example.tabletdisplay/.MainActivity'
 if ($LASTEXITCODE -ne 0) {
@@ -52,5 +58,6 @@ if ($LASTEXITCODE -ne 0) {
     DeviceSerial = $Serial
     Package = 'com.example.tabletdisplay'
     ForwardedPort = 27183
+    ReverseInputPort = 27184
     AppStarted = $true
 }

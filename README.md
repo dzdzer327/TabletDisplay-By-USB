@@ -2,7 +2,7 @@
 
 Windows 10/11 通过 USB 连接 Android 平板的有线扩展显示器项目。
 
-当前仓库已完成 Windows 虚拟显示器和 IDD 交换链取帧验证，并开始建立 Android 10+ 客户端。ADB 与 Android APK 构建环境已经可用；视频编码、USB 码流传输和输入回传仍在开发中。
+当前原型已打通 Windows 虚拟扩展屏、DXGI 抓屏、D3D11 零拷贝硬件 H.264 编码、ADB/USB 传输、Android `MediaCodec` 硬解显示及原生触控回传。开发连接仍使用 ADB；软键盘和产品化 USB 通道尚未完成。
 
 ## 当前结构
 
@@ -12,6 +12,8 @@ Windows 10/11 通过 USB 连接 Android 平板的有线扩展显示器项目。
 - `android/*.ps1`：Android 环境检查与 APK 构建入口。
 - `docs/`：阶段验收条件、调试和测试记录。
 - `需求分析/`：原始需求说明。
+
+产品化桌面端、平板端、设置与诊断界面的完整规格见 [产品需求与双端界面规格](docs/product-requirements-and-ui-spec.md)。
 
 ## 开发机要求
 
@@ -82,6 +84,21 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 输出为 `windows/controller/TabletDisplayController/x64/Debug/TabletDisplayController.exe`。驱动成功安装后，运行该程序会创建并保持 Tablet Display 软件设备；按 `X` 退出后设备被移除。
 
+连接并授权平板后，可从仓库根目录启动整个开发原型：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\windows\controller\Start-TabletDisplayPrototype.ps1
+```
+
+允许弹出的管理员提示后，Windows 会出现第二块扩展屏。应用通常仍在主屏或上次关闭的位置打开，可先选中应用窗口再使用：
+
+- `Ctrl+Alt+Right`：把当前窗口移到 Tablet Display。
+- `Ctrl+Alt+Left`：把当前窗口移回主屏。
+- `Ctrl+Alt+Home`：把看不见的鼠标光标送回主屏中央。
+
+平板直接显示视频流中的 Windows 系统鼠标；触摸平板则通过独立回传通道注入 Windows Touch。
+
 详细的成功判定、回滚和记录格式见 [阶段一清单](docs/phase-1-idd-validation.md)。
 
 ## 检查 Android 环境
@@ -102,7 +119,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Debug APK 输出到 `android/TabletDisplayApp/app/build/outputs/apk/debug/app-debug.apk`。Gradle 缓存、`local.properties`、构建目录和 APK 已由 Android 工程的 `.gitignore` 排除，不应提交到 Git。
 
-连接并授权一台 Android 平板后，可一键构建、覆盖安装、建立 ADB 视频端口转发并启动应用：
+连接并授权一台 Android 平板后，可一键构建、覆盖安装、建立 ADB 视频及触控端口映射并启动应用：
 
 ```powershell
 .\android\Deploy-TabletDisplayApp.ps1

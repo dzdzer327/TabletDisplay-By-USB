@@ -1,4 +1,5 @@
 #include <conio.h>
+#include <algorithm>
 #include <atomic>
 #include <fstream>
 #include <iostream>
@@ -16,6 +17,9 @@
 namespace
 {
     constexpr wchar_t DeviceId[] = L"TabletDisplayDriver";
+    constexpr int HotkeyMoveWindowToTablet = 1;
+    constexpr int HotkeyMoveWindowToPrimary = 2;
+    constexpr int HotkeyReturnCursorToPrimary = 3;
 
     struct DeviceCreationContext
     {
@@ -35,6 +39,100 @@ namespace
         auto* creationContext = static_cast<DeviceCreationContext*>(context);
         creationContext->Result = creationResult;
         SetEvent(creationContext->CompletionEvent);
+    }
+
+    struct MonitorLookup
+    {
+        bool WantPrimary = false;
+        bool Found = false;
+        RECT WorkArea = {};
+        RECT MonitorArea = {};
+    };
+
+    BOOL CALLBACK FindMonitorCallback(HMONITOR monitor, HDC, LPRECT, LPARAM context)
+    {
+        auto* lookup = reinterpret_cast<MonitorLookup*>(context);
+        MONITORINFO info = {};
+        info.cbSize = sizeof(info);
+        if (!GetMonitorInfoW(monitor, &info))
+        {
+            return TRUE;
+        }
+
+        const bool isPrimary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        if (isPrimary != lookup->WantPrimary)
+        {
+            return TRUE;
+        }
+
+        lookup->Found = true;
+        lookup->WorkArea = info.rcWork;
+        lookup->MonitorArea = info.rcMonitor;
+        return FALSE;
+    }
+
+    bool FindMonitor(bool primary, MonitorLookup& result)
+    {
+        result = {};
+        result.WantPrimary = primary;
+        EnumDisplayMonitors(nullptr, nullptr, FindMonitorCallback, reinterpret_cast<LPARAM>(&result));
+        return result.Found;
+    }
+
+    void ReturnCursorToPrimaryMonitor()
+    {
+        MonitorLookup monitor;
+        if (!FindMonitor(true, monitor))
+        {
+            return;
+        }
+
+        const int x = monitor.MonitorArea.left +
+                      (monitor.MonitorArea.right - monitor.MonitorArea.left) / 2;
+        const int y = monitor.MonitorArea.top +
+                      (monitor.MonitorArea.bottom - monitor.MonitorArea.top) / 2;
+        SetCursorPos(x, y);
+    }
+
+    void MoveForegroundWindowToMonitor(bool primary)
+    {
+        const HWND window = GetForegroundWindow();
+        MonitorLookup target;
+        if (window == nullptr || !FindMonitor(primary, target))
+        {
+            MessageBeep(MB_ICONWARNING);
+            return;
+        }
+
+        WINDOWPLACEMENT placement = {};
+        placement.length = sizeof(placement);
+        const bool wasMaximized = GetWindowPlacement(window, &placement) &&
+                                  placement.showCmd == SW_SHOWMAXIMIZED;
+        if (wasMaximized || IsIconic(window))
+        {
+            ShowWindow(window, SW_RESTORE);
+        }
+
+        RECT current = {};
+        if (!GetWindowRect(window, &current))
+        {
+            return;
+        }
+
+        const int targetWidth = target.WorkArea.right - target.WorkArea.left;
+        const int targetHeight = target.WorkArea.bottom - target.WorkArea.top;
+        const int currentWidth = static_cast<int>(current.right - current.left);
+        const int currentHeight = static_cast<int>(current.bottom - current.top);
+        const int width = (std::min)(currentWidth, targetWidth);
+        const int height = (std::min)(currentHeight, targetHeight);
+        const int x = target.WorkArea.left + (targetWidth - width) / 2;
+        const int y = target.WorkArea.top + (targetHeight - height) / 2;
+        SetWindowPos(window, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+        if (wasMaximized)
+        {
+            ShowWindow(window, SW_MAXIMIZE);
+        }
+        SetForegroundWindow(window);
     }
 }
 
@@ -175,7 +273,10 @@ int wmain()
     }
 
     std::wcout << L"Tablet Display software device is active.\n"
-               << L"Press X to disconnect it and exit.\n";
+               << L"Press X to disconnect it and exit.\n"
+               << L"Ctrl+Alt+Right: move the active window to Tablet Display.\n"
+               << L"Ctrl+Alt+Left: move the active window to the primary display.\n"
+               << L"Ctrl+Alt+Home: return the mouse cursor to the primary display.\n";
     if (!driverStatsAvailable)
     {
         std::wcout << L"Driver frame counters require an elevated controller; video streaming remains enabled.\n";
@@ -185,12 +286,50 @@ int wmain()
     VideoStreamer streamer;
     std::thread streamerThread([&]() { streamer.Run(stopStreamer); });
 
+    const UINT hotkeyModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+    const bool moveToTabletHotkey =
+        RegisterHotKey(nullptr, HotkeyMoveWindowToTablet, hotkeyModifiers, VK_RIGHT) != FALSE;
+    const bool moveToPrimaryHotkey =
+        RegisterHotKey(nullptr, HotkeyMoveWindowToPrimary, hotkeyModifiers, VK_LEFT) != FALSE;
+    const bool returnCursorHotkey =
+        RegisterHotKey(nullptr, HotkeyReturnCursorToPrimary, hotkeyModifiers, VK_HOME) != FALSE;
+    if (!moveToTabletHotkey || !moveToPrimaryHotkey || !returnCursorHotkey)
+    {
+        std::wcerr << L"One or more Tablet Display hotkeys could not be registered.\n";
+    }
+
     LONG64 previousFrameCount = 0;
     std::uint64_t previousEncodedFrameCount = 0;
     ULONGLONG previousTick = GetTickCount64();
 
     while (true)
     {
+        MSG message = {};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (message.message != WM_HOTKEY)
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+                continue;
+            }
+
+            switch (message.wParam)
+            {
+            case HotkeyMoveWindowToTablet:
+                MoveForegroundWindowToMonitor(false);
+                break;
+            case HotkeyMoveWindowToPrimary:
+                MoveForegroundWindowToMonitor(true);
+                break;
+            case HotkeyReturnCursorToPrimary:
+                ReturnCursorToPrimaryMonitor();
+                break;
+            default:
+                break;
+            }
+        }
+
         if (_kbhit())
         {
             const int key = _getch();
@@ -221,10 +360,15 @@ int wmain()
                     << L" status=\"" << streamStats.StatusText << L"\""
                     << L" videoSize=" << streamStats.Width << L'x' << streamStats.Height
                     << L" captured=" << streamStats.CapturedFrames
+                    << L" captureUs=" << streamStats.LastCaptureTimeUs
                     << L" videoFps=" << static_cast<int>(streamFps + 0.5)
                     << L" encoded=" << streamStats.EncodedFrames
+                    << L" encodeUs=" << streamStats.LastEncodeTimeUs
                     << L" sentBytes=" << streamStats.SentBytes
+                    << L" inputConnected=" << (streamStats.InputConnected ? 1 : 0)
+                    << L" touchFrames=" << streamStats.InjectedTouchFrames
                     << L" hardware=" << (streamStats.HardwareEncoder ? 1 : 0)
+                    << L" zeroCopy=" << (streamStats.ZeroCopyInput ? 1 : 0)
                     << L" encoder=\"" << streamStats.EncoderName << L"\""
                     << L" error=0x" << std::hex << streamStats.LastError << std::dec << L'\n';
             }
@@ -241,7 +385,10 @@ int wmain()
                        << L" (" << static_cast<int>(streamFps + 0.5) << L" fps)"
                        << L" | encoded " << streamStats.EncodedFrames
                        << L" | sent " << (streamStats.SentBytes / 1024) << L" KiB"
+                       << L" | touch " << (streamStats.InputConnected ? L"connected" : L"waiting")
+                       << L"/" << streamStats.InjectedTouchFrames
                        << L" | " << (streamStats.HardwareEncoder ? L"hardware" : L"software")
+                       << L"/" << (streamStats.ZeroCopyInput ? L"D3D11" : L"memory")
                        << L" " << streamStats.EncoderName
                        << L"          \n" << std::flush;
 
@@ -254,6 +401,18 @@ int wmain()
     }
 
     std::wcout << L'\n';
+    if (moveToTabletHotkey)
+    {
+        UnregisterHotKey(nullptr, HotkeyMoveWindowToTablet);
+    }
+    if (moveToPrimaryHotkey)
+    {
+        UnregisterHotKey(nullptr, HotkeyMoveWindowToPrimary);
+    }
+    if (returnCursorHotkey)
+    {
+        UnregisterHotKey(nullptr, HotkeyReturnCursorToPrimary);
+    }
     stopStreamer = true;
     if (streamerThread.joinable())
     {

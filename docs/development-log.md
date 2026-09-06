@@ -99,10 +99,32 @@
 - 真机截图确认 Android 已显示 Windows 第二屏桌面；Android Logcat 确认使用 `OMX.qcom.video.decoder.avc`，SurfaceView 收到并渲染首帧。
 - 动态窗口测试期间，抓帧与编码计数持续增长，证明 `虚拟扩展桌面 → DXGI 抓帧 → D3D11 NV12 → NVIDIA H.264 → TCP/ADB → Android MediaCodec → SurfaceView` 数据链路已打通。
 - 当前原型在 D3D11 NV12 转换后仍经过一次 GPU 到系统内存的读回，再送入硬件编码器；功能闭环已完成，但零拷贝和 1080p60 性能优化仍属于下一阶段。
+- 新增独立触控回传端口 `27184`：Android 将最多 10 个触点的按下、移动、抬起与取消事件发送至 `adb reverse` 通道，Windows 根据第二屏桌面矩形映射坐标并通过 `InjectTouchInput` 注入原生触控。
+- 输入监听器只绑定电脑回环地址；断连时会取消尚未抬起的活动触点。控制器日志新增输入连接状态和累计注入触控帧数。
+- 修复触控注入失败后的状态一致性：只有 `InjectTouchInput` 成功时才提交活动触点集合，并忽略连接恢复后缺失“按下”事件的孤立移动/抬起事件。
+- 增加独立鼠标光标通道：Windows 从 Desktop Duplication 帧元数据读取副屏光标可见性和位置，经 TDSP `0x8` 状态包发送；Android 在视频 Surface 上方绘制高对比度鼠标箭头，解决硬件光标未包含在桌面纹理中而导致“鼠标进入副屏后看不见”的问题。
+- Windows 控制器注册三个全局应急快捷键：`Ctrl+Alt+Right` 将当前窗口移动到 Tablet Display，`Ctrl+Alt+Left` 将当前窗口移回主屏，`Ctrl+Alt+Home` 把鼠标送回主屏中央。
+- 真机重启测试发现虚拟显示拓扑刚建立时 Desktop Duplication 可能返回 `DXGI_ERROR_ACCESS_LOST (0x887A0026)`；控制器现会重新枚举 Tablet Display 并重建 Duplication 会话，不再让视频线程永久退出。
+- 后续真机观察确认该 IDD/DXGI 路径已经能在视频中显示 Windows 系统鼠标；Android 独立叠加会造成双光标，因此已移除叠加箭头并保留原生鼠标。
+- 参考用户提供的电子屏幕意象重新设计 Android 启动器图标：两块青色叠放屏幕表示扩展显示，USB-C 线表示有线连接；生成透明自适应前景及 mdpi～xxxhdpi 兼容图标。
+- 动态基线测试以约 58～62 次/秒移动副屏窗口：IDD 驱动约 54fps，但旧视频链路的抓取与编码均只有约 32.3fps。
+- 将 D3D11 Video Processor 生成的 NV12 纹理通过 `MFCreateDXGISurfaceBuffer` 直接包装为 Media Foundation 输入样本，并用 `IMFDXGIDeviceManager` 向 NVIDIA H.264 MFT 提供同一 D3D11 设备；删除 staging texture、`Map`、逐行 CPU 复制和内存输入缓冲。
+- 控制器运行日志新增 `zeroCopy`、`captureUs` 与 `encodeUs`。真机确认 `hardware=1 zeroCopy=1`，活跃帧 GPU 捕获/转换通常低于 1ms，NVIDIA 编码提交通常约 0.1～0.3ms。
+- 进一步定位原 32fps 上限来自 Windows 默认计时粒度下的 `std::sleep_until(16.67ms)` 实际睡眠约 31ms。改用高精度 Waitable Timer，仅用于抑制超过 60fps 的短时积压，不再重复限制 Desktop Duplication 的刷新节奏。
+- 最终同条件 6 秒动态测试：桌面源更新 59.2 次/秒，Windows 抓取和编码平均 57.4fps，逐秒达到 60fps；Android 硬解码约 53～57fps。相对旧链路 32.3fps 提升约 78%，全程错误码为 0，触控连接正常。
+- Windows 控制器 Debug/Release 均重新编译成功；Android `testDebugUnitTest` 与 `assembleDebug` 通过。
 
 ## 下一步
 
 1. 在 Windows 显示设置中验证四种分辨率、横竖屏和扩展桌面排列。
-2. 增加触控、鼠标和键盘输入回传。
+2. 增加软键盘与物理键盘输入回传，并完善触控模式切换与系统鼠标光标形状同步。
 3. 增加显示旋转处理、断连/模式变更后的全链路自动恢复。
-4. 测量端到端延迟、CPU/GPU 占用与长时间稳定性，并把 NV12 纹理到编码器的系统内存中转改为 D3D11 零拷贝。
+4. 测量端到端延迟、CPU/GPU 占用与长时间稳定性，并进一步验证纹理池和实验性 120fps 路径。
+
+## 2026-09-06：产品化双端应用需求基线
+
+- 新增 `docs/product-requirements-and-ui-spec.md`，将当前“控制台 + ADB 脚本 + Android 全屏页”原型与产品化目标明确区分。
+- 定义 Windows 桌面应用、后台服务、托盘、驱动以及 Android 连接、显示、输入模块的职责边界。
+- 给出 Windows 首页、显示、画质与性能、输入、设备、诊断、设置页面，以及 Android 连接首页和全屏快捷控制层的布局草图。
+- 建立带编号的 Windows、连接、视频、输入和诊断需求清单，以及配置同步、异常状态、安装升级、安全隐私和首版验收标准。
+- 将首个 UI 迭代限定为：保留 ADB 传输后端，但让普通开发测试不再依赖 PowerShell 手动启动；后续再独立替换产品化 USB 通道。

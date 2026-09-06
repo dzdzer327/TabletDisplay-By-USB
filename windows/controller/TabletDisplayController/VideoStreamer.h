@@ -8,12 +8,17 @@ struct VideoStreamerStats
 {
     bool DisplayFound = false;
     bool Connected = false;
+    bool InputConnected = false;
     bool HardwareEncoder = false;
+    bool ZeroCopyInput = false;
     unsigned Width = 0;
     unsigned Height = 0;
     std::uint64_t CapturedFrames = 0;
     std::uint64_t EncodedFrames = 0;
     std::uint64_t SentBytes = 0;
+    std::uint64_t InjectedTouchFrames = 0;
+    std::uint64_t LastCaptureTimeUs = 0;
+    std::uint64_t LastEncodeTimeUs = 0;
     long LastError = 0;
     std::wstring EncoderName;
     std::wstring StatusText = L"Waiting to start";
