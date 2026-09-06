@@ -85,9 +85,24 @@
 - 用户已在平板实机确认当前界面显示“等待电脑画面 / ADB 视频端口：27183”，Android 客户端部署与等待连接状态通过验收。
 - 新增 `android/Deploy-TabletDisplayApp.ps1`，统一完成 Debug 构建、ADB 覆盖安装、端口转发和应用启动。
 
+## 2026-09-06：Windows 到 Android 的视频闭环
+
+- 在 `TabletDisplayController` 中新增 `VideoStreamer`，把视频处理放在 Windows 用户态控制器中，驱动仍专注于创建和维护间接显示器。
+- 控制器使用 DXGI Desktop Duplication 自动选择非主屏的间接显示输出并取得 `B8G8R8A8` 桌面纹理。
+- 使用 D3D11 Video Processor 将桌面纹理转换为 NV12，再交给 Media Foundation H.264 编码器；优先枚举硬件异步 MFT，找不到硬件编码器时回退到系统同步编码器。
+- 实现 Media Foundation 异步 MFT 的 `METransformNeedInput` / `METransformHaveOutput` 事件处理，配置 8 Mbps、60 fps、无 B 帧、60 帧 GOP 和低延迟模式。
+- 将编码结果规范化为 H.264 Annex B 访问单元，并按 `TDSP v1` 32 字节大端序包头经 `127.0.0.1:27183` TCP 发送；断线后每秒自动尝试重连。
+- 新增 `Start-TabletDisplayPrototype.ps1`，统一完成设备选择、ADB 端口转发、Android 应用启动和管理员控制器启动。
+- 控制器新增持久运行日志 `TabletDisplayController.runtime.log`，记录驱动帧数、抓帧/编码/发送计数、帧率、编码器名称与错误码。
+- Android 端新增解码器组件与累计渲染帧日志，便于通过 Logcat 诊断真机硬解码状态。
+- 在华为 DBR-W10（Android 12）真机完成闭环：Windows 枚举第二屏 `DISPLAY25`，分辨率 `1920×1200`；Windows 选择 `NVIDIA H.264 Encoder MFT` 硬件编码器；TCP/ADB 已连续发送数十 MiB，Windows 端错误码为 0。
+- 真机截图确认 Android 已显示 Windows 第二屏桌面；Android Logcat 确认使用 `OMX.qcom.video.decoder.avc`，SurfaceView 收到并渲染首帧。
+- 动态窗口测试期间，抓帧与编码计数持续增长，证明 `虚拟扩展桌面 → DXGI 抓帧 → D3D11 NV12 → NVIDIA H.264 → TCP/ADB → Android MediaCodec → SurfaceView` 数据链路已打通。
+- 当前原型在 D3D11 NV12 转换后仍经过一次 GPU 到系统内存的读回，再送入硬件编码器；功能闭环已完成，但零拷贝和 1080p60 性能优化仍属于下一阶段。
+
 ## 下一步
 
 1. 在 Windows 显示设置中验证四种分辨率、横竖屏和扩展桌面排列。
-2. 将交换链的 D3D11 纹理接入硬件 H.264 编码器，先把码流保存/解析为本机测试输出。
-3. 将 Android 模板页面替换为适合低延迟显示的 `SurfaceView`，接入 `MediaCodec` H.264 解码骨架。
-4. 建立 Windows 端会话与传输组件，通过开发期 ADB 端口转发把编码访问单元发送给 Android 客户端。
+2. 增加触控、鼠标和键盘输入回传。
+3. 增加显示旋转处理、断连/模式变更后的全链路自动恢复。
+4. 测量端到端延迟、CPU/GPU 占用与长时间稳定性，并把 NV12 纹理到编码器的系统内存中转改为 D3D11 零拷贝。

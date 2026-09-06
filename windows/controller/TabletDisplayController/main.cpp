@@ -1,11 +1,15 @@
 #include <conio.h>
+#include <atomic>
+#include <fstream>
 #include <iostream>
+#include <thread>
 
 #include <windows.h>
 #include <sddl.h>
 #include <swdevice.h>
 
 #include "../../shared/TabletDisplayFrameStats.h"
+#include "VideoStreamer.h"
 
 #pragma comment(lib, "Advapi32.lib")
 
@@ -36,6 +40,17 @@ namespace
 
 int wmain()
 {
+    wchar_t executablePath[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, executablePath, ARRAYSIZE(executablePath));
+    std::wstring runtimeLogPath = executablePath;
+    const auto lastSeparator = runtimeLogPath.find_last_of(L"\\/");
+    runtimeLogPath.resize(lastSeparator == std::wstring::npos ? 0 : lastSeparator + 1);
+    runtimeLogPath += L"TabletDisplayController.runtime.log";
+    {
+        std::wofstream log(runtimeLogPath, std::ios::trunc);
+        log << L"Tablet Display controller starting\n";
+    }
+
     PSECURITY_DESCRIPTOR securityDescriptor = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;AU)",
@@ -60,6 +75,22 @@ int wmain()
         sizeof(TabletDisplay::FrameStats),
         TabletDisplay::FrameStatsMappingName);
     LocalFree(securityDescriptor);
+
+    bool driverStatsAvailable = true;
+    if (statsMapping == nullptr && GetLastError() == ERROR_ACCESS_DENIED)
+    {
+        // Creating a named object in the Global namespace requires an elevated
+        // process. Video streaming itself does not, so keep a private mapping
+        // and let the controller continue when launched normally.
+        statsMapping = CreateFileMappingW(
+            INVALID_HANDLE_VALUE,
+            nullptr,
+            PAGE_READWRITE,
+            0,
+            sizeof(TabletDisplay::FrameStats),
+            nullptr);
+        driverStatsAvailable = false;
+    }
 
     if (statsMapping == nullptr)
     {
@@ -145,8 +176,17 @@ int wmain()
 
     std::wcout << L"Tablet Display software device is active.\n"
                << L"Press X to disconnect it and exit.\n";
+    if (!driverStatsAvailable)
+    {
+        std::wcout << L"Driver frame counters require an elevated controller; video streaming remains enabled.\n";
+    }
+
+    std::atomic_bool stopStreamer = false;
+    VideoStreamer streamer;
+    std::thread streamerThread([&]() { streamer.Run(stopStreamer); });
 
     LONG64 previousFrameCount = 0;
+    std::uint64_t previousEncodedFrameCount = 0;
     ULONGLONG previousTick = GetTickCount64();
 
     while (true)
@@ -170,6 +210,24 @@ int wmain()
             const LONG width = InterlockedCompareExchange(&stats->Width, 0, 0);
             const LONG height = InterlockedCompareExchange(&stats->Height, 0, 0);
             const LONG error = InterlockedCompareExchange(&stats->LastError, 0, 0);
+            const auto streamStats = streamer.GetStats();
+            const double streamFps =
+                static_cast<double>(streamStats.EncodedFrames - previousEncodedFrameCount) / seconds;
+
+            {
+                std::wofstream log(runtimeLogPath, std::ios::app);
+                log << L"driverFrames=" << frameCount
+                    << L" driverSize=" << width << L'x' << height
+                    << L" status=\"" << streamStats.StatusText << L"\""
+                    << L" videoSize=" << streamStats.Width << L'x' << streamStats.Height
+                    << L" captured=" << streamStats.CapturedFrames
+                    << L" videoFps=" << static_cast<int>(streamFps + 0.5)
+                    << L" encoded=" << streamStats.EncodedFrames
+                    << L" sentBytes=" << streamStats.SentBytes
+                    << L" hardware=" << (streamStats.HardwareEncoder ? 1 : 0)
+                    << L" encoder=\"" << streamStats.EncoderName << L"\""
+                    << L" error=0x" << std::hex << streamStats.LastError << std::dec << L'\n';
+            }
 
             std::wcout << L'\r'
                        << (state == 1 ? L"Receiving frames" : L"Waiting for frames")
@@ -177,9 +235,18 @@ int wmain()
                        << L" | " << static_cast<int>(fps + 0.5) << L" fps"
                        << L" | total " << frameCount
                        << L" | error 0x" << std::hex << error << std::dec
-                       << L"          " << std::flush;
+                       << L"\nVideo: " << streamStats.StatusText
+                       << L" | " << streamStats.Width << L'x' << streamStats.Height
+                       << L" | captured " << streamStats.CapturedFrames
+                       << L" (" << static_cast<int>(streamFps + 0.5) << L" fps)"
+                       << L" | encoded " << streamStats.EncodedFrames
+                       << L" | sent " << (streamStats.SentBytes / 1024) << L" KiB"
+                       << L" | " << (streamStats.HardwareEncoder ? L"hardware" : L"software")
+                       << L" " << streamStats.EncoderName
+                       << L"          \n" << std::flush;
 
             previousFrameCount = frameCount;
+            previousEncodedFrameCount = streamStats.EncodedFrames;
             previousTick = nowTick;
         }
 
@@ -187,6 +254,11 @@ int wmain()
     }
 
     std::wcout << L'\n';
+    stopStreamer = true;
+    if (streamerThread.joinable())
+    {
+        streamerThread.join();
+    }
     SwDeviceClose(softwareDevice);
     UnmapViewOfFile(stats);
     CloseHandle(statsMapping);

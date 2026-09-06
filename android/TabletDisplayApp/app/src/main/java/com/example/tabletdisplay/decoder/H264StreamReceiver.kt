@@ -2,6 +2,7 @@ package com.example.tabletdisplay.decoder
 
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.util.Log
 import android.view.Surface
 import java.io.BufferedInputStream
 import java.io.DataInputStream
@@ -33,6 +34,10 @@ class H264StreamReceiver(
   private val surface: Surface,
   private val onStatus: (ReceiverStatus) -> Unit,
 ) {
+  private companion object {
+    const val TAG = "TabletDisplayVideo"
+  }
+
   private val running = AtomicBoolean(false)
   private var scope: CoroutineScope? = null
   private var receiveJob: Job? = null
@@ -83,6 +88,7 @@ class H264StreamReceiver(
 
           clientSocket = client
           client.tcpNoDelay = true
+          Log.i(TAG, "Windows sender connected through ADB")
           onStatus(ReceiverStatus.Connected(client.inetAddress.hostAddress ?: "ADB"))
 
           try {
@@ -114,6 +120,7 @@ class H264StreamReceiver(
       var decoderWidth = 0
       var decoderHeight = 0
       var renderedFrames = 0L
+      var lastLoggedFrameCount = 0L
 
       try {
         while (running.get()) {
@@ -125,11 +132,17 @@ class H264StreamReceiver(
             decoderWidth = packet.width
             decoderHeight = packet.height
             renderedFrames = 0
+            lastLoggedFrameCount = 0
+            Log.i(TAG, "H.264 decoder started at ${packet.width}x${packet.height}")
           }
 
           queuePacket(decoder, packet)
           renderedFrames += drainDecoder(decoder)
           onStatus(ReceiverStatus.Decoding(decoderWidth, decoderHeight, renderedFrames))
+          if (renderedFrames / 120L > lastLoggedFrameCount / 120L) {
+            Log.i(TAG, "Rendered $renderedFrames frames")
+            lastLoggedFrameCount = renderedFrames
+          }
 
           if (packet.flags and VideoStreamProtocol.FLAG_END_OF_STREAM != 0) {
             break
@@ -173,6 +186,7 @@ class H264StreamReceiver(
     return MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC).also { codec ->
       codec.configure(format, surface, null, 0)
       codec.start()
+      Log.i(TAG, "MediaCodec component: ${codec.name}")
     }
   }
 
