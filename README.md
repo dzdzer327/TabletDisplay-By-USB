@@ -23,13 +23,11 @@
 
 ### 平板端：真实 USB 画面传输
 
-下图为华为平板接收 Windows 副屏测试画面的真实截图，不是效果示意图。
+下图为华为平板通过 USB 显示 Windows 副屏上 VS Code 窗口的真实截图，右侧展开的是平板端快捷控制面板。
 
-![平板横屏显示 Windows 副屏的动态测试图案](docs/images/tablet-landscape.png)
+![平板显示 Windows 副屏上的 VS Code 与快捷控制面板](docs/images/tablet-vscode-controls.jpg)
 
-横向副屏内容在竖向平板上会等比居中，不拉伸；黑边区域不会误触电脑。
-
-<img src="docs/images/tablet-portrait.png" alt="竖屏等比显示与上下黑边" width="320" />
+可以将 Windows 应用窗口拖到平板副屏使用，并通过侧边面板切换触控、旋转锁定与性能浮层。
 
 ## 下载哪个文件
 
