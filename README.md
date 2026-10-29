@@ -21,6 +21,12 @@
 
 ![Windows 桌面端画质与性能设置](docs/images/windows-settings.jpg)
 
+### 平板端：连接首页
+
+在平板端进入扩展屏、测试连接，或打开设置。
+
+![Android 平板端连接首页](docs/images/tablet-home.jpg)
+
 ### 平板端：真实 USB 画面传输
 
 下图为华为平板通过 USB 显示 Windows 副屏上 VS Code 窗口的真实截图，右侧展开的是平板端快捷控制面板。
