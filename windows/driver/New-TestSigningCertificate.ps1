@@ -19,7 +19,7 @@ if ($null -eq $certificate) {
     $certificate = New-SelfSignedCertificate `
         -Type CodeSigningCert `
         -Subject $Subject `
-        -FriendlyName 'Tablet Display Development Test Signing' `
+        -FriendlyName 'USB Tablet Display Development Test Signing' `
         -CertStoreLocation 'Cert:\CurrentUser\My' `
         -KeyAlgorithm RSA `
         -KeyLength 2048 `

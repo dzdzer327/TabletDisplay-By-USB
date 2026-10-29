@@ -48,5 +48,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "PnPUtil failed with exit code $LASTEXITCODE"
 }
 
-Write-Host 'Tablet Display test driver is trusted and staged in the Windows driver store.'
+Write-Host 'USB Tablet Display test driver is trusted and staged in the Windows driver store.'
 Write-Host 'Start TabletDisplayController.exe to create the virtual display device.'

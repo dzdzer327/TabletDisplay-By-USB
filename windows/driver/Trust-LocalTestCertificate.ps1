@@ -61,6 +61,6 @@ if (-not $rootTrusted -or -not $publisherTrusted) {
     throw 'The certificate was not found in both required local-machine trust stores after import.'
 }
 
-Write-Host 'Tablet Display development certificate is trusted by this computer.'
+Write-Host 'USB Tablet Display development certificate is trusted by this computer.'
 Write-Host "Certificate thumbprint: $($certificate.Thumbprint)"
 Write-Host 'No driver was installed and no boot configuration was changed.'

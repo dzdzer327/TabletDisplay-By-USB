@@ -8,6 +8,8 @@
 **/x64/
 **/Debug/
 **/Release/
+**/bin/
+**/obj/
 **/*.obj
 **/*.pdb
 **/*.lib
@@ -17,6 +19,18 @@
 # Generated driver packages and local test certificates
 /windows/driver/package/
 /windows/driver/certificates/
+
+# Locally generated release archives
+/dist/
+/packaging/clean-windows-results/
+
+# Never publish private signing keys or local logs
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.key
+*.log
 
 # Microsoft Windows driver samples are kept as a separate Git repository
 /windows/driver/upstream/

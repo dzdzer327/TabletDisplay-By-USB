@@ -43,5 +43,5 @@ if (-not (Test-Path -LiteralPath $apkPath)) {
     throw "Gradle returned success, but the APK was not found: $apkPath"
 }
 
-Write-Host "Tablet Display Android APK created: $apkPath"
+Write-Host "USB Tablet Display Android APK created: $apkPath"
 Get-Item -LiteralPath $apkPath | Select-Object FullName, Length, LastWriteTime

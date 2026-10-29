@@ -36,9 +36,14 @@ static constexpr DWORD TABLET_DISPLAY_MAX_MONITOR_COUNT = 1;
 //像素，刷新率
 static const struct IndirectSampleMonitor::SampleMonitorMode s_SampleDefaultModes[] =
 {
+    // Prefer the tablet's high-refresh mode while retaining 60 Hz fallbacks.
+    { 1920, 1200, 120 },
     { 1920, 1200, 60 },
+    { 1920, 1080, 120 },
     { 1920, 1080, 60 },
+    { 1280,  720, 120 },
     { 1280,  720, 60 },
+    { 2560, 1600, 120 },
     { 2560, 1600, 60 },
 };
 
@@ -583,7 +588,7 @@ void IndirectDeviceContext::InitAdapter()
     AdapterCaps.EndPointDiagnostics.TransmissionType = IDDCX_TRANSMISSION_TYPE_WIRED_OTHER;
 
     // Declare your device strings for telemetry (required)
-    AdapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"Tablet Display";
+    AdapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"USB Tablet Display";
     AdapterCaps.EndPointDiagnostics.pEndPointManufacturerName = L"Tablet Display Project";
     AdapterCaps.EndPointDiagnostics.pEndPointModelName = L"USB Tablet Display";
 
@@ -857,9 +862,13 @@ NTSTATUS IddSampleMonitorQueryModes(IDDCX_MONITOR MonitorObject, const IDARG_IN_
     // monitor's descriptor and instead are based on the static processing capability of the device. The OS will
     // report the available set of modes for a given output as the intersection of monitor modes with target modes.
 
+    TargetModes.push_back(CreateIddCxTargetMode(2560, 1600, 120));
     TargetModes.push_back(CreateIddCxTargetMode(2560, 1600, 60));
+    TargetModes.push_back(CreateIddCxTargetMode(1920, 1200, 120));
     TargetModes.push_back(CreateIddCxTargetMode(1920, 1200, 60));
+    TargetModes.push_back(CreateIddCxTargetMode(1920, 1080, 120));
     TargetModes.push_back(CreateIddCxTargetMode(1920, 1080, 60));
+    TargetModes.push_back(CreateIddCxTargetMode(1280,  720, 120));
     TargetModes.push_back(CreateIddCxTargetMode(1280,  720, 60));
 
     pOutArgs->TargetModeBufferOutputCount = (UINT) TargetModes.size();

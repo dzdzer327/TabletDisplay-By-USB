@@ -3,7 +3,7 @@
 
 #define VER_FILETYPE                VFT_DLL
 #define VER_FILESUBTYPE             VFT_UNKNOWN
-#define VER_FILEDESCRIPTION_STR     "Tablet Display UMDF Indirect Display Driver"
+#define VER_FILEDESCRIPTION_STR     "USB Tablet Display UMDF Indirect Display Driver"
 #define VER_INTERNALNAME_STR        "TabletDisplayDriver"
 #define VER_ORIGINALFILENAME_STR    "TabletDisplayDriver.dll"
 

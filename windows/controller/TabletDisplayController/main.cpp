@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <sddl.h>
 #include <swdevice.h>
+#include <dxgi.h>
 
 #include "../../shared/TabletDisplayFrameStats.h"
 #include "VideoStreamer.h"
@@ -17,6 +18,7 @@
 namespace
 {
     constexpr wchar_t DeviceId[] = L"TabletDisplayDriver";
+    constexpr wchar_t StopEventName[] = L"Global\\TabletDisplayControllerStop";
     constexpr int HotkeyMoveWindowToTablet = 1;
     constexpr int HotkeyMoveWindowToPrimary = 2;
     constexpr int HotkeyReturnCursorToPrimary = 3;
@@ -136,22 +138,65 @@ namespace
     }
 }
 
-int wmain()
+int wmain(int argc, wchar_t* argv[])
 {
+    // The loader has resolved the native runtime dependencies before reaching main.
+    // This probe deliberately does not create a virtual monitor or start a session.
+    if (argc == 2 && std::wstring(argv[1]) == L"--dependency-check")
+    {
+        std::wcout << L"USB Tablet Display native dependencies loaded successfully.\n";
+        return 0;
+    }
+    std::wstring settingsPath;
+    bool validateSettingsOnly = false;
+    for (int index = 1; index < argc; ++index)
+    {
+        const std::wstring argument = argv[index];
+        if ((argument == L"--settings" || argument == L"--validate-settings") && index + 1 < argc)
+        {
+            validateSettingsOnly = argument == L"--validate-settings";
+            settingsPath = argv[++index];
+        }
+        else { std::wcerr << L"Unknown or incomplete controller argument\n"; return 2; }
+    }
+    SessionSettings requestedSettings = LoadSessionSettings(settingsPath);
+    if (!requestedSettings.Valid) { std::wcerr << requestedSettings.Error << L'\n'; return 2; }
+    if (validateSettingsOnly)
+    {
+        std::wcout << L"width=" << requestedSettings.Width << L" height=" << requestedSettings.Height
+            << L" refresh=" << requestedSettings.RefreshRate << L" fps=" << requestedSettings.FrameRate
+            << L" bitrate=" << requestedSettings.BitRate << L" touch=" << requestedSettings.TouchEnabled
+            << L" revision=" << requestedSettings.Revision << L'\n';
+        return 0;
+    }
+
     wchar_t executablePath[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, executablePath, ARRAYSIZE(executablePath));
     std::wstring runtimeLogPath = executablePath;
     const auto lastSeparator = runtimeLogPath.find_last_of(L"\\/");
     runtimeLogPath.resize(lastSeparator == std::wstring::npos ? 0 : lastSeparator + 1);
     runtimeLogPath += L"TabletDisplayController.runtime.log";
+    wchar_t commonData[MAX_PATH] = {};
+    if (GetEnvironmentVariableW(L"ProgramData", commonData, ARRAYSIZE(commonData)) > 0)
+    {
+        const std::wstring installedLogDirectory = std::wstring(commonData) + L"\\USB Tablet Display\\Logs";
+        const DWORD attributes = GetFileAttributesW(installedLogDirectory.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            runtimeLogPath = installedLogDirectory + L"\\TabletDisplayController.runtime.log";
+        }
+    }
     {
         std::wofstream log(runtimeLogPath, std::ios::trunc);
-        log << L"Tablet Display controller starting\n";
+        log << L"USB Tablet Display controller starting\n";
     }
 
     PSECURITY_DESCRIPTOR securityDescriptor = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;AU)",
+            // The controller runs elevated, while the desktop UI normally runs at
+            // medium integrity. Label these named objects at medium integrity so
+            // the UI can read statistics and signal a graceful shutdown.
+            L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;AU)S:(ML;;NW;;;ME)",
             SDDL_REVISION_1,
             &securityDescriptor,
             nullptr))
@@ -172,7 +217,24 @@ int wmain()
         0,
         sizeof(TabletDisplay::FrameStats),
         TabletDisplay::FrameStatsMappingName);
+
+    HANDLE stopEvent = CreateEventW(
+        &securityAttributes,
+        TRUE,
+        FALSE,
+        StopEventName);
     LocalFree(securityDescriptor);
+
+    if (stopEvent == nullptr)
+    {
+        std::wcerr << L"Could not create the controller stop event. Win32 error: "
+                   << GetLastError() << L'\n';
+        if (statsMapping != nullptr)
+        {
+            CloseHandle(statsMapping);
+        }
+        return 1;
+    }
 
     bool driverStatsAvailable = true;
     if (statsMapping == nullptr && GetLastError() == ERROR_ACCESS_DENIED)
@@ -194,6 +256,7 @@ int wmain()
     {
         std::wcerr << L"Could not create frame-statistics mapping. Win32 error: "
                    << GetLastError() << L'\n';
+        CloseHandle(stopEvent);
         return 1;
     }
 
@@ -208,6 +271,7 @@ int wmain()
         std::wcerr << L"Could not open frame-statistics memory. Win32 error: "
                    << GetLastError() << L'\n';
         CloseHandle(statsMapping);
+        CloseHandle(stopEvent);
         return 1;
     }
 
@@ -222,6 +286,7 @@ int wmain()
                    << GetLastError() << L'\n';
         UnmapViewOfFile(stats);
         CloseHandle(statsMapping);
+        CloseHandle(stopEvent);
         return 1;
     }
 
@@ -233,7 +298,7 @@ int wmain()
     createInfo.pszzHardwareIds = hardwareIds;
     createInfo.pszzCompatibleIds = compatibleIds;
     createInfo.pszInstanceId = DeviceId;
-    createInfo.pszDeviceDescription = L"Tablet Display";
+    createInfo.pszDeviceDescription = L"USB Tablet Display";
     createInfo.CapabilityFlags = SWDeviceCapabilitiesRemovable |
                                  SWDeviceCapabilitiesSilentInstall |
                                  SWDeviceCapabilitiesDriverRequired;
@@ -256,6 +321,7 @@ int wmain()
         CloseHandle(creationContext.CompletionEvent);
         UnmapViewOfFile(stats);
         CloseHandle(statsMapping);
+        CloseHandle(stopEvent);
         return 1;
     }
 
@@ -264,17 +330,18 @@ int wmain()
 
     if (waitResult != WAIT_OBJECT_0 || FAILED(creationContext.Result))
     {
-        std::wcerr << L"Windows could not create Tablet Display. HRESULT: 0x"
+        std::wcerr << L"Windows could not create USB Tablet Display. HRESULT: 0x"
                    << std::hex << creationContext.Result << L'\n';
         SwDeviceClose(softwareDevice);
         UnmapViewOfFile(stats);
         CloseHandle(statsMapping);
+        CloseHandle(stopEvent);
         return 1;
     }
 
-    std::wcout << L"Tablet Display software device is active.\n"
+    std::wcout << L"USB Tablet Display software device is active.\n"
                << L"Press X to disconnect it and exit.\n"
-               << L"Ctrl+Alt+Right: move the active window to Tablet Display.\n"
+               << L"Ctrl+Alt+Right: move the active window to USB Tablet Display.\n"
                << L"Ctrl+Alt+Left: move the active window to the primary display.\n"
                << L"Ctrl+Alt+Home: return the mouse cursor to the primary display.\n";
     if (!driverStatsAvailable)
@@ -284,7 +351,27 @@ int wmain()
 
     std::atomic_bool stopStreamer = false;
     VideoStreamer streamer;
-    std::thread streamerThread([&]() { streamer.Run(stopStreamer); });
+    LONG settingsError = DISP_CHANGE_FAILED;
+    for (int attempt = 0; attempt < 300 && WaitForSingleObject(stopEvent, 0) != WAIT_OBJECT_0; ++attempt)
+    {
+        settingsError = ApplyTabletDisplaySettings(requestedSettings);
+        if (settingsError == DISP_CHANGE_SUCCESSFUL || settingsError == DISP_CHANGE_BADMODE ||
+            settingsError == DISP_CHANGE_BADPARAM || GetTabletDisplayMode().Width != 0) break;
+        Sleep(100);
+    }
+    SessionSettings activeSettings = settingsError == DISP_CHANGE_SUCCESSFUL ? requestedSettings : SessionSettings{};
+    const auto runVideo = [&](SessionSettings snapshot)
+    {
+        while (!stopStreamer)
+        {
+            streamer.Run(stopStreamer, snapshot);
+            const auto error = static_cast<HRESULT>(streamer.GetStats().LastError);
+            if (stopStreamer || (error != DXGI_ERROR_ACCESS_LOST && error != DXGI_ERROR_NOT_FOUND &&
+                error != DXGI_ERROR_MODE_CHANGE_IN_PROGRESS && error != DXGI_ERROR_WAIT_TIMEOUT)) break;
+            for (int attempt = 0; attempt < 10 && !stopStreamer; ++attempt) Sleep(50);
+        }
+    };
+    std::thread streamerThread(runVideo, activeSettings);
 
     const UINT hotkeyModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
     const bool moveToTabletHotkey =
@@ -295,7 +382,7 @@ int wmain()
         RegisterHotKey(nullptr, HotkeyReturnCursorToPrimary, hotkeyModifiers, VK_HOME) != FALSE;
     if (!moveToTabletHotkey || !moveToPrimaryHotkey || !returnCursorHotkey)
     {
-        std::wcerr << L"One or more Tablet Display hotkeys could not be registered.\n";
+        std::wcerr << L"One or more USB Tablet Display hotkeys could not be registered.\n";
     }
 
     LONG64 previousFrameCount = 0;
@@ -304,6 +391,11 @@ int wmain()
 
     while (true)
     {
+        if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
+        {
+            break;
+        }
+
         MSG message = {};
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
         {
@@ -342,6 +434,22 @@ int wmain()
         const ULONGLONG nowTick = GetTickCount64();
         if (nowTick - previousTick >= 1000)
         {
+            const SessionSettings changed = LoadSessionSettings(settingsPath);
+            if (!changed.Valid)
+            {
+                settingsError = DISP_CHANGE_BADPARAM;
+            }
+            else if (changed.Revision != requestedSettings.Revision)
+            {
+                requestedSettings = changed;
+                stopStreamer = true;
+                if (streamerThread.joinable()) streamerThread.join();
+                settingsError = ApplyTabletDisplaySettings(changed);
+                if (settingsError == DISP_CHANGE_SUCCESSFUL) activeSettings = changed;
+                stopStreamer = false;
+                previousEncodedFrameCount = 0;
+                streamerThread = std::thread(runVideo, activeSettings);
+            }
             const LONG64 frameCount = InterlockedCompareExchange64(&stats->FrameCount, 0, 0);
             const double seconds = static_cast<double>(nowTick - previousTick) / 1000.0;
             const double fps = static_cast<double>(frameCount - previousFrameCount) / seconds;
@@ -351,7 +459,9 @@ int wmain()
             const LONG error = InterlockedCompareExchange(&stats->LastError, 0, 0);
             const auto streamStats = streamer.GetStats();
             const double streamFps =
-                static_cast<double>(streamStats.EncodedFrames - previousEncodedFrameCount) / seconds;
+                static_cast<double>(streamStats.EncodedFrames >= previousEncodedFrameCount ?
+                    streamStats.EncodedFrames - previousEncodedFrameCount : 0) / seconds;
+            const auto actualMode = GetTabletDisplayMode();
 
             {
                 std::wofstream log(runtimeLogPath, std::ios::app);
@@ -362,6 +472,16 @@ int wmain()
                     << L" captured=" << streamStats.CapturedFrames
                     << L" captureUs=" << streamStats.LastCaptureTimeUs
                     << L" videoFps=" << static_cast<int>(streamFps + 0.5)
+                    << L" targetFps=" << streamStats.TargetFrameRate
+                    << L" targetBitrate=" << streamStats.TargetBitRate
+                    << L" settingsRevision=" << activeSettings.Revision
+                    << L" streamRevision=" << streamStats.SettingsRevision
+                    << L" requestedRevision=" << requestedSettings.Revision
+                    << L" settingsError=" << settingsError
+                    << L" displayWidth=" << actualMode.Width
+                    << L" displayHeight=" << actualMode.Height
+                    << L" displayHz=" << actualMode.RefreshRate
+                    << L" touchEnabled=" << activeSettings.TouchEnabled
                     << L" encoded=" << streamStats.EncodedFrames
                     << L" encodeUs=" << streamStats.LastEncodeTimeUs
                     << L" sentBytes=" << streamStats.SentBytes
@@ -421,5 +541,6 @@ int wmain()
     SwDeviceClose(softwareDevice);
     UnmapViewOfFile(stats);
     CloseHandle(statsMapping);
+    CloseHandle(stopEvent);
     return 0;
 }

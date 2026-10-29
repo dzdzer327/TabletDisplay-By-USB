@@ -30,7 +30,7 @@ if ([string]::IsNullOrWhiteSpace($Serial)) {
     $Serial = ($devices[0] -split '\s+')[0]
 }
 
-Write-Host "Installing Tablet Display on Android device: $Serial"
+Write-Host "Installing USB Tablet Display on Android device: $Serial"
 & $adb -s $Serial install '--no-streaming' '-r' $apkPath
 if ($LASTEXITCODE -ne 0) {
     throw "ADB installation failed with exit code $LASTEXITCODE"
@@ -51,7 +51,7 @@ if ($LASTEXITCODE -ne 0) {
 & $adb -s $Serial shell am force-stop com.example.tabletdisplay
 & $adb -s $Serial shell am start -n 'com.example.tabletdisplay/.MainActivity'
 if ($LASTEXITCODE -ne 0) {
-    throw "Tablet Display launch failed with exit code $LASTEXITCODE"
+    throw "USB Tablet Display launch failed with exit code $LASTEXITCODE"
 }
 
 [pscustomobject]@{

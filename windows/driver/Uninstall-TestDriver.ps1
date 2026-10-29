@@ -40,5 +40,5 @@ if ($RemoveSigningCertificate) {
         ForEach-Object { Remove-Item -LiteralPath $_.PSPath }
 }
 
-Write-Host 'Tablet Display test driver and its system trust entries were removed.'
+Write-Host 'USB Tablet Display test driver and its system trust entries were removed.'
 Write-Host 'Use Disable-TestSigning.ps1 and restart Windows when no other test drivers need test mode.'

@@ -1,4 +1,4 @@
-# Tablet Display 产品需求与双端界面规格
+# USB Tablet Display 产品需求与双端界面规格
 
 > 文档版本：1.0
 >
@@ -6,7 +6,7 @@
 >
 > 适用范围：Windows 10/11 + Android 10 及以上
 >
-> 产品名称（暂定）：Tablet Display
+> 产品名称：USB Tablet Display（USB 平板扩展屏）
 
 ## 目录
 
@@ -33,13 +33,13 @@
 
 ## 1. 文档目的
 
-本文档定义 Tablet Display 从“可运行的技术原型”演进为“普通用户可以安装、连接、配置和排错的双端应用”所需的完整产品行为。
+本文档定义 USB Tablet Display 从“可运行的技术原型”演进为“普通用户可以安装、连接、配置和排错的双端应用”所需的完整产品行为。
 
 后续的界面设计、模块拆分、接口设计、开发任务和验收测试都应引用本文档中的需求编号。本文档描述用户应该看到什么、系统应该如何响应，不限定 Windows UI 必须使用 WinUI 3、WPF 或其他具体框架。
 
 ## 2. 产品定位
 
-Tablet Display 通过 USB 数据线把 Android 平板变成 Windows 的真实扩展显示器。它不是主屏镜像工具：Windows 会枚举出一块独立的虚拟显示器，用户可以在两块屏幕上显示和操作不同的应用。
+USB Tablet Display 通过 USB 数据线把 Android 平板变成 Windows 的真实扩展显示器。它不是主屏镜像工具：Windows 会枚举出一块独立的虚拟显示器，用户可以在两块屏幕上显示和操作不同的应用。
 
 核心价值：
 
@@ -119,13 +119,13 @@ Tablet Display 通过 USB 数据线把 Android 平板变成 Windows 的真实扩
 
 Windows 侧应拆分为三个独立职责，避免关闭设置窗口就导致副屏消失：
 
-1. **Tablet Display Driver**
+1. **USB Tablet Display Driver**
 
    UMDF/IddCx 间接显示驱动，负责创建虚拟显示器、上报模式、接收交换链。
-2. **Tablet Display Service**
+2. **USB Tablet Display Service**
 
    后台引擎，负责 USB 发现、会话、抓帧、编码、传输、输入注入、恢复与日志。服务应在用户关闭设置窗口后继续运行。
-3. **Tablet Display Desktop**
+3. **USB Tablet Display Desktop**
 
    普通权限桌面应用和托盘图标，通过受限的本机 IPC 与服务通信，只负责呈现状态和修改设置。
 
@@ -181,7 +181,7 @@ Android 输入    ──输入──> USB ──> Windows Touch/Keyboard 注入
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Tablet Display                           DBR-W10  ● 已连接     ─ □ × │
+│ USB Tablet Display                       DBR-W10  ● 已连接     ─ □ × │
 ├──────────────┬───────────────────────────────────────────────────────┤
 │  首页        │  ┌─────────────────────────────────────────────────┐  │
 │  显示        │  │  华为 DBR-W10                       USB 已连接  │  │
@@ -342,7 +342,7 @@ Android 输入    ──输入──> USB ──> Windows Touch/Keyboard 注入
 
 - 当前设备和状态（不可点击标题）。
 - 开始/停止扩展屏。
-- 打开 Tablet Display。
+- 打开 USB Tablet Display。
 - 打开 Windows 显示设置。
 - 将鼠标移回主屏。
 - 诊断连接。
@@ -367,7 +367,7 @@ Android 输入    ──输入──> USB ──> Windows Touch/Keyboard 注入
 1. 说明用途：“用 USB 把平板变成 Windows 扩展屏”。
 2. 连接数据线，并说明必须支持数据传输。
 3. 授权必要权限；每项权限旁解释用途。
-4. 在电脑端打开 Tablet Display 并确认配对码。
+4. 在电脑端打开 USB Tablet Display 并确认配对码。
 
 不得在首次打开时连续弹出无解释的权限窗口。权限只在用户进入需要该能力的步骤时请求。
 
@@ -377,7 +377,7 @@ Android 输入    ──输入──> USB ──> Windows Touch/Keyboard 注入
 
 ```text
 ┌──────────────────────────────┐
-│ Tablet Display          ⚙    │
+│ USB Tablet Display      ⚙    │
 │                              │
 │       [叠放屏幕图标]          │
 │                              │
@@ -562,7 +562,7 @@ Windows 是分辨率、编码器和目标帧率的最终控制端；Android 对�
 
 | 编号 | 需求 | 优先级 |
 |---|---|---|
-| VID-001 | 连接成功后创建名为 Tablet Display 的真实扩展屏 | P0 |
+| VID-001 | 连接成功后创建名为 USB Tablet Display 的真实扩展屏 | P0 |
 | VID-002 | 断开后移除虚拟显示器且不残留幽灵屏幕 | P0 |
 | VID-003 | 支持 1280×720、1920×1080、1920×1200、2560×1600 | P0 |
 | VID-004 | 首版支持 30/60fps，默认 60fps | P0 |
@@ -705,7 +705,7 @@ Windows 是分辨率、编码器和目标帧率的最终控制端；Android 对�
 1. 在干净的 Windows 11 x64 电脑安装桌面端。
 2. 在 Android 10+ 平板安装客户端。
 3. 连接支持数据的 USB 线，双端完成配对。
-4. 无需命令行或 ADB，Windows 出现 Tablet Display。
+4. 无需命令行或 ADB，Windows 出现 USB Tablet Display。
 5. Windows 默认进入扩展模式，平板自动显示副屏。
 
 ### 18.2 日常使用

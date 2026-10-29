@@ -97,13 +97,18 @@ class TouchInputSender {
             750,
           )
           socket = connectedSocket
+          val peerWatcher = watchTouchPeer(connectedSocket)
           Log.i(TAG, "Windows touch receiver connected through ADB reverse")
 
-          DataOutputStream(BufferedOutputStream(connectedSocket.getOutputStream(), 16 * 1024)).use { output ->
+          try { DataOutputStream(BufferedOutputStream(connectedSocket.getOutputStream(), 16 * 1024)).use { output ->
             while (running.get() && !connectedSocket.isClosed) {
               val frame = frames.poll(250, TimeUnit.MILLISECONDS) ?: continue
               writeFrame(output, frame)
             }
+          } } finally {
+            connectedSocket.closeQuietly()
+            peerWatcher.join(1000)
+            frames.clear() // Never replay contacts from a disconnected gesture.
           }
         }
       } catch (_: InterruptedException) {

@@ -26,7 +26,7 @@ $existingPackages = Get-WindowsDriver -Online -All |
     Where-Object { $_.ProviderName -eq 'Tablet Display Project' }
 
 foreach ($package in $existingPackages) {
-    Write-Host "Removing previous Tablet Display package: $($package.Driver)"
+    Write-Host "Removing previous USB Tablet Display package: $($package.Driver)"
     & pnputil.exe '/delete-driver' $package.Driver '/uninstall' '/force'
     if ($LASTEXITCODE -ne 0) {
         throw "Could not remove $($package.Driver). PnPUtil exit code: $LASTEXITCODE"

@@ -10,7 +10,7 @@ Class = Display
 ClassVer = 2.0
 Provider=%ManufacturerName%
 CatalogFile=TabletDisplayDriver.cat
-DriverVer=08/21/2026,0.1.0.2
+DriverVer=10/16/2026,0.2.5.0
 
 [Manufacturer]
 %ManufacturerName%=Standard,NTamd64.10.0
@@ -65,8 +65,8 @@ TabletDisplayDriver.dll
 
 [Strings]
 ManufacturerName="Tablet Display Project"
-DiskName = "Tablet Display Driver Installation Disk"
-DeviceName="Tablet Display"
+DiskName = "USB Tablet Display Driver Installation Disk"
+DeviceName="USB Tablet Display"
 
 REG_MULTI_SZ  = 0x00010000
 REG_SZ        = 0x00000000

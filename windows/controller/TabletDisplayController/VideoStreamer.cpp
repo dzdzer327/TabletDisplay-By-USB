@@ -42,8 +42,6 @@ namespace
     constexpr std::uint32_t ProtocolVersion = 1;
     constexpr std::uint32_t FlagCodecConfig = 1;
     constexpr std::uint32_t FlagKeyFrame = 1u << 1;
-    constexpr std::uint32_t TargetFrameRate = 60;
-    constexpr std::uint32_t TargetBitRate = 8'000'000;
     constexpr std::size_t MaxAccessUnitSize = 8u * 1024u * 1024u;
     constexpr std::uint32_t TouchPacketMagic = 0x54444950;
     constexpr std::uint32_t TouchProtocolVersion = 1;
@@ -349,10 +347,12 @@ namespace
         TouchInputServer(
             const RECT& displayRectangle,
             const std::atomic_bool& applicationStop,
-            StatusCallback callback)
+            StatusCallback callback,
+            bool touchEnabled)
             : m_DisplayRectangle(displayRectangle),
               m_ApplicationStop(applicationStop),
               m_Callback(std::move(callback)),
+              m_TouchEnabled(touchEnabled),
               m_Thread([this]() { Run(); })
         {
         }
@@ -488,6 +488,7 @@ namespace
                 return false;
             }
 
+            if (!m_TouchEnabled) return true;
             std::vector<POINTER_TOUCH_INFO> touches;
             struct ContactUpdate
             {
@@ -638,6 +639,7 @@ namespace
         RECT m_DisplayRectangle = {};
         const std::atomic_bool& m_ApplicationStop;
         StatusCallback m_Callback;
+        bool m_TouchEnabled = true;
         std::atomic_bool m_LocalStop = false;
         std::uint64_t m_InjectedFrames = 0;
         std::unordered_map<UINT32, LastContact> m_ActiveContacts;
@@ -726,7 +728,7 @@ namespace
                 candidates += adapterDescription.Description;
                 candidates += L"; ";
 
-                if (IsPrimaryOutput(description))
+                if (!IsTabletDisplayName(description.DeviceName))
                 {
                     continue;
                 }
@@ -761,8 +763,10 @@ namespace
     class DesktopCapture
     {
     public:
-        void Initialize(const SelectedOutput& selected)
+        void Initialize(const SelectedOutput& selected, const SessionSettings& settings)
         {
+            m_FrameRate = settings.FrameRate;
+            m_InputRefreshRate = settings.RefreshRate;
             UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if defined(_DEBUG)
             flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -887,10 +891,10 @@ namespace
 
             D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
             content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-            content.InputFrameRate = {TargetFrameRate, 1};
+            content.InputFrameRate = {m_InputRefreshRate, 1};
             content.InputWidth = m_Width;
             content.InputHeight = m_Height;
-            content.OutputFrameRate = {TargetFrameRate, 1};
+            content.OutputFrameRate = {m_FrameRate, 1};
             content.OutputWidth = m_Width;
             content.OutputHeight = m_Height;
             content.Usage = D3D11_VIDEO_USAGE_OPTIMAL_SPEED;
@@ -913,6 +917,8 @@ namespace
 
         UINT m_Width = 0;
         UINT m_Height = 0;
+        UINT m_FrameRate = 60;
+        UINT m_InputRefreshRate = 60;
         ComPtr<ID3D11Device> m_Device;
         ComPtr<ID3D11DeviceContext> m_Context;
         ComPtr<IDXGIOutputDuplication> m_Duplication;
@@ -961,8 +967,9 @@ namespace
     class H264Encoder
     {
     public:
-        void Initialize(UINT width, UINT height, ID3D11Device* d3dDevice)
+        void Initialize(UINT width, UINT height, ID3D11Device* d3dDevice, const SessionSettings& settings)
         {
+            m_Settings = settings;
             m_Width = width;
             m_Height = height;
             if (!ActivateEncoder(true))
@@ -986,7 +993,7 @@ namespace
             CheckHr(sample->AddBuffer(buffer.Get()), "Add input buffer");
             CheckHr(sample->SetSampleTime(static_cast<LONGLONG>(presentationTimeUs * 10)),
                     "Set input sample time");
-            CheckHr(sample->SetSampleDuration(10'000'000 / TargetFrameRate),
+            CheckHr(sample->SetSampleDuration(10'000'000 / m_Settings.FrameRate),
                     "Set input sample duration");
 
             std::vector<EncodedAccessUnit> output;
@@ -1111,10 +1118,10 @@ namespace
             ComPtr<ICodecAPI> codec;
             m_Transform.As(&codec);
             TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncMPVDefaultBPictureCount, 0);
-            TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncMPVGOPSize, TargetFrameRate);
+            TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncMPVGOPSize, m_Settings.FrameRate);
             TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncCommonRateControlMode,
                               eAVEncCommonRateControlMode_CBR);
-            TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncCommonMeanBitRate, TargetBitRate);
+            TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncCommonMeanBitRate, m_Settings.BitRate);
             TrySetCodecUInt32(codec.Get(), CODECAPI_AVEncCommonQualityVsSpeed, 33);
             TrySetCodecBool(codec.Get(), CODECAPI_AVLowLatencyMode, true);
 
@@ -1122,10 +1129,10 @@ namespace
             CheckHr(MFCreateMediaType(&outputType), "Create H.264 output type");
             CheckHr(outputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video), "Set output major type");
             CheckHr(outputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264), "Set output subtype");
-            CheckHr(outputType->SetUINT32(MF_MT_AVG_BITRATE, TargetBitRate), "Set output bit rate");
+            CheckHr(outputType->SetUINT32(MF_MT_AVG_BITRATE, m_Settings.BitRate), "Set output bit rate");
             CheckHr(MFSetAttributeSize(outputType.Get(), MF_MT_FRAME_SIZE, m_Width, m_Height),
                     "Set output frame size");
-            CheckHr(MFSetAttributeRatio(outputType.Get(), MF_MT_FRAME_RATE, TargetFrameRate, 1),
+            CheckHr(MFSetAttributeRatio(outputType.Get(), MF_MT_FRAME_RATE, m_Settings.FrameRate, 1),
                     "Set output frame rate");
             CheckHr(MFSetAttributeRatio(outputType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1),
                     "Set output pixel aspect ratio");
@@ -1141,7 +1148,7 @@ namespace
             CheckHr(inputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12), "Set input subtype");
             CheckHr(MFSetAttributeSize(inputType.Get(), MF_MT_FRAME_SIZE, m_Width, m_Height),
                     "Set input frame size");
-            CheckHr(MFSetAttributeRatio(inputType.Get(), MF_MT_FRAME_RATE, TargetFrameRate, 1),
+            CheckHr(MFSetAttributeRatio(inputType.Get(), MF_MT_FRAME_RATE, m_Settings.FrameRate, 1),
                     "Set input frame rate");
             CheckHr(MFSetAttributeRatio(inputType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1),
                     "Set input pixel aspect ratio");
@@ -1289,6 +1296,7 @@ namespace
         UINT m_Width = 0;
         UINT m_Height = 0;
         DWORD m_InputStreamId = 0;
+        SessionSettings m_Settings;
         DWORD m_OutputStreamId = 0;
         bool m_IsAsync = false;
         bool m_IsHardware = false;
@@ -1332,8 +1340,9 @@ VideoStreamerStats VideoStreamer::GetStats() const
     return m_Impl->Stats;
 }
 
-void VideoStreamer::Run(const std::atomic_bool& stopRequested)
+void VideoStreamer::Run(const std::atomic_bool& stopRequested, const SessionSettings& settings)
 {
+    m_Impl->ChangeStats([](auto& stats) { stats = VideoStreamerStats{}; });
     const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool uninitializeCom = SUCCEEDED(comResult);
     WSADATA winsock = {};
@@ -1350,7 +1359,7 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
         CheckHr(MFStartup(MF_VERSION, MFSTARTUP_FULL), "MFStartup");
         mediaFoundationStarted = true;
 
-        m_Impl->ChangeStats([](auto& stats) { stats.StatusText = L"Waiting for Tablet Display output"; });
+        m_Impl->ChangeStats([](auto& stats) { stats.StatusText = L"Waiting for USB Tablet Display output"; });
         SelectedOutput selected;
         std::wstring candidates;
         for (int attempt = 0; attempt < 100 && !stopRequested; ++attempt)
@@ -1364,7 +1373,7 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
         }
         if (!selected.Output)
         {
-            throw HResultError("No non-primary display output was found", DXGI_ERROR_NOT_FOUND);
+            throw HResultError("No USB Tablet Display output was found", DXGI_ERROR_NOT_FOUND);
         }
 
         m_Impl->ChangeStats([&](auto& stats)
@@ -1384,10 +1393,10 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
                     stats.InjectedTouchFrames = injectedFrames;
                     stats.LastError = error;
                 });
-            });
+            }, settings.TouchEnabled);
 
         DesktopCapture capture;
-        capture.Initialize(selected);
+        capture.Initialize(selected, settings);
         m_Impl->ChangeStats([&](auto& stats)
         {
             stats.Width = capture.Width();
@@ -1396,12 +1405,15 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
         });
 
         H264Encoder encoder;
-        encoder.Initialize(capture.Width(), capture.Height(), capture.Device());
+        encoder.Initialize(capture.Width(), capture.Height(), capture.Device(), settings);
         m_Impl->ChangeStats([&](auto& stats)
         {
             stats.HardwareEncoder = encoder.IsHardware();
             stats.ZeroCopyInput = encoder.UsesD3D11Input();
             stats.EncoderName = encoder.Name();
+            stats.TargetFrameRate = settings.FrameRate;
+            stats.TargetBitRate = settings.BitRate;
+            stats.SettingsRevision = settings.Revision;
             stats.StatusText = L"Waiting for Android receiver";
         });
 
@@ -1410,7 +1422,7 @@ void VideoStreamer::Run(const std::atomic_bool& stopRequested)
         bool configSent = false;
         const auto startTime = std::chrono::steady_clock::now();
         auto nextConnectAttempt = startTime;
-        HighResolutionFramePacer framePacer(TargetFrameRate);
+        HighResolutionFramePacer framePacer(settings.FrameRate);
 
         while (!stopRequested)
         {

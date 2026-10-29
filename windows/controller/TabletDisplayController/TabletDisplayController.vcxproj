@@ -69,9 +69,11 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="VideoStreamer.cpp" />
+    <ClCompile Include="SessionSettings.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VideoStreamer.h" />
+    <ClInclude Include="SessionSettings.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

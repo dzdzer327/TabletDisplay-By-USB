@@ -1,0 +1,405 @@
+<Window x:Class="TabletDisplayDesktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="USB Tablet Display"
+        Width="1120"
+        Height="760"
+        MinWidth="920"
+        MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource PageBrush}"
+        Icon="Assets/tablet-display-icon.png"
+        Loaded="Window_Loaded"
+        Closed="Window_Closed">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="214" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{StaticResource SidebarBrush}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="88" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="20,18,12,14">
+                    <Border Width="48" Height="48" CornerRadius="12" Background="#123E58">
+                        <Image Source="Assets/tablet-display-icon.png" Margin="5" Stretch="Uniform" />
+                    </Border>
+                    <StackPanel Margin="11,4,0,0">
+                        <TextBlock Text="Tablet" FontSize="17" FontWeight="SemiBold" Foreground="White" />
+                        <TextBlock Text="Display" FontSize="17" FontWeight="SemiBold" Foreground="#76D1FF" Margin="0,-3,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <ListBox x:Name="Navigation" Grid.Row="1" SelectedIndex="0" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource NavItemStyle}" SelectionChanged="Navigation_SelectionChanged">
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE80F;" FontSize="17" Width="30" /><TextBlock Text="首页" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7F4;" FontSize="17" Width="30" /><TextBlock Text="显示" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="17" Width="30" /><TextBlock Text="画质与性能" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE815;" FontSize="17" Width="30" /><TextBlock Text="输入" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE88E;" FontSize="17" Width="30" /><TextBlock Text="设备" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D5;" FontSize="17" Width="30" /><TextBlock Text="诊断" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="17" Width="30" /><TextBlock Text="设置" /></StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE946;" FontSize="17" Width="30" /><TextBlock Text="关于" /></StackPanel>
+                    </ListBoxItem>
+                </ListBox>
+
+                <Border Grid.Row="2" Margin="14,10,14,18" Padding="12" CornerRadius="9" Background="#14293D">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Ellipse x:Name="SidebarStatusDot" Width="9" Height="9" Fill="#8A98A8" VerticalAlignment="Top" Margin="0,5,10,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock x:Name="SidebarStatusText" Text="正在检查状态" Foreground="White" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock x:Name="SidebarDeviceText" Text="未检测到平板" Foreground="#91A1B3" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="64" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="30" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid Margin="28,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TopPageTitle" Text="首页" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Padding="10,5" CornerRadius="12" Background="#EEF8F3" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="TopStatusDot" Width="8" Height="8" Fill="#8A98A8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                <TextBlock x:Name="TopStatusText" Text="正在检查" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Style="{StaticResource SecondaryButtonStyle}" Padding="12,7" Click="RefreshButton_Click">
+                            <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;" Margin="0,0,6,0" /><TextBlock Text="刷新" /></StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <TabControl x:Name="PageTabs" Grid.Row="1" SelectedIndex="0" Background="Transparent" BorderThickness="0" Padding="0">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <ContentPresenter ContentSource="SelectedContent" />
+                    </ControlTemplate>
+                </TabControl.Template>
+
+                <!-- 首页 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24,28,24">
+                            <TextBlock Text="欢迎使用 USB Tablet Display" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="通过 USB 将 Android 平板变成低延迟 Windows 扩展屏。" Style="{StaticResource PageDescriptionStyle}" />
+
+                            <Border Style="{StaticResource CardStyle}" Padding="24">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse x:Name="HeroStatusDot" Width="12" Height="12" Fill="#8A98A8" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                            <TextBlock x:Name="HeroStatusTitle" Text="正在检查连接状态" FontSize="22" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="HeroStatusDetail" Text="请稍候，正在检查驱动、控制器和 Android 设备。" Foreground="{StaticResource SecondaryTextBrush}" FontSize="14" Margin="22,8,0,0" />
+                                        <TextBlock x:Name="HeroDisplayDetail" Text="尚未建立显示会话" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" Margin="22,5,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="StartButton" Style="{StaticResource PrimaryButtonStyle}" Click="StartButton_Click" Content="开始扩展屏" Margin="0,0,10,0" />
+                                        <Button x:Name="StopButton" Style="{StaticResource SecondaryButtonStyle}" Click="StopButton_Click" Content="停止" IsEnabled="False" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <UniformGrid Columns="4" Margin="0,0,0,16">
+                                <Border Style="{StaticResource CardStyle}" Margin="0,0,10,0" Padding="17">
+                                    <StackPanel><TextBlock Text="当前编码帧率" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="FpsText" Text="-- fps" Style="{StaticResource MetricValueStyle}" Margin="0,8,0,0" /></StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource CardStyle}" Margin="5,0,5,0" Padding="17">
+                                    <StackPanel><TextBlock Text="发送码率" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="BitrateText" Text="-- Mbps" Style="{StaticResource MetricValueStyle}" Margin="0,8,0,0" /></StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource CardStyle}" Margin="5,0,5,0" Padding="17">
+                                    <StackPanel><TextBlock Text="估算延迟" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="LatencyText" Text="-- ms" Style="{StaticResource MetricValueStyle}" Margin="0,8,0,0" /></StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource CardStyle}" Margin="10,0,0,0" Padding="17">
+                                    <StackPanel><TextBlock Text="编码路径" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="EncodingPathText" Text="--" FontSize="18" FontWeight="SemiBold" Margin="0,11,0,0" /></StackPanel>
+                                </Border>
+                            </UniformGrid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                                    <StackPanel>
+                                        <TextBlock Text="快捷设置" Style="{StaticResource SectionTitleStyle}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,12,0"><TextBlock Text="分辨率" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6" /><ComboBox x:Name="QuickResolutionCombo" SelectionChanged="SettingsChoiceChanged"><ComboBoxItem>1280 × 720</ComboBoxItem><ComboBoxItem>1920 × 1080</ComboBoxItem><ComboBoxItem IsSelected="True">1920 × 1200</ComboBoxItem><ComboBoxItem>2560 × 1600</ComboBoxItem></ComboBox></StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="0,0,12,0"><TextBlock Text="帧率上限" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6" /><ComboBox x:Name="QuickFpsCombo" SelectionChanged="SettingsChoiceChanged" SelectedIndex="1"><ComboBoxItem>30 fps</ComboBoxItem><ComboBoxItem>60 fps</ComboBoxItem><ComboBoxItem>120 fps（实验性）</ComboBoxItem></ComboBox></StackPanel>
+                                            <StackPanel Grid.Column="2"><TextBlock Text="触控" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6" /><ComboBox x:Name="QuickTouchCombo" SelectionChanged="SettingsChoiceChanged" SelectedIndex="0"><ComboBoxItem>原生触控</ComboBoxItem><ComboBoxItem>仅显示</ComboBoxItem></ComboBox></StackPanel>
+                                        </Grid>
+                                        <Button x:Name="QuickApplyButton" Style="{StaticResource PrimaryButtonStyle}" Content="应用设置" Click="ApplySettings_Click" HorizontalAlignment="Right" Margin="0,12,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="常用操作" Style="{StaticResource SectionTitleStyle}" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Content="打开 Windows 显示设置" Click="OpenDisplaySettings_Click" Margin="0,0,0,8" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Content="测试连接" Click="TestConnection_Click" Margin="0,0,0,8" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}" Content="将鼠标移回主屏" Click="ReturnCursor_Click" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 显示 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="显示" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="设置虚拟显示器的用途、分辨率、方向和 Windows 桌面布局。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="屏幕排列" Style="{StaticResource SectionTitleStyle}" />
+                                    <Grid Height="190" Background="#F5F8FB">
+                                        <Border Width="260" Height="145" HorizontalAlignment="Left" Margin="55,20,0,0" Background="#DCE6F0" BorderBrush="#AAB8C8" BorderThickness="2" CornerRadius="7"><Grid><TextBlock Text="1" FontSize="36" FontWeight="SemiBold" Foreground="#607286" HorizontalAlignment="Center" VerticalAlignment="Center" /><TextBlock Text="主屏" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Foreground="#607286" /></Grid></Border>
+                                        <Border Width="235" Height="145" HorizontalAlignment="Right" Margin="0,20,55,0" Background="#DDF4FF" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="3" CornerRadius="7"><Grid><TextBlock Text="2" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /><TextBlock Text="USB Tablet Display" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Foreground="{StaticResource PrimaryBrush}" /></Grid></Border>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Style="{StaticResource SecondaryButtonStyle}" Content="副屏放到主屏右侧" Margin="0,0,8,0" IsEnabled="False" ToolTip="此功能尚未接入" /><Button Style="{StaticResource SecondaryButtonStyle}" Content="打开系统显示设置" Click="OpenDisplaySettings_Click" /></StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="USB Tablet Display 设置" Style="{StaticResource SectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="190" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="52" /><RowDefinition Height="52" /><RowDefinition Height="52" /><RowDefinition Height="52" /><RowDefinition Height="52" /></Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="显示用途" VerticalAlignment="Center" /><ComboBox Grid.Row="0" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>扩展这些显示器</ComboBoxItem><ComboBoxItem>复制这些显示器</ComboBoxItem><ComboBoxItem>暂时仅显示</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="1" Text="分辨率" VerticalAlignment="Center" /><ComboBox x:Name="DisplayResolutionCombo" SelectionChanged="SettingsChoiceChanged" Grid.Row="1" Grid.Column="1"><ComboBoxItem>1280 × 720</ComboBoxItem><ComboBoxItem>1920 × 1080</ComboBoxItem><ComboBoxItem IsSelected="True">1920 × 1200（推荐）</ComboBoxItem><ComboBoxItem>2560 × 1600</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="2" Text="Windows 刷新率" VerticalAlignment="Center" /><ComboBox x:Name="DisplayRefreshCombo" SelectionChanged="SettingsChoiceChanged" Grid.Row="2" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>60 Hz（兼容）</ComboBoxItem><ComboBoxItem>120 Hz（实验性）</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="3" Text="方向" VerticalAlignment="Center" /><ComboBox Grid.Row="3" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>自动</ComboBoxItem><ComboBoxItem>横向</ComboBoxItem><ComboBoxItem>纵向</ComboBoxItem><ComboBoxItem>横向翻转</ComboBoxItem><ComboBoxItem>纵向翻转</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="4" Text="Windows 缩放" VerticalAlignment="Center" /><ComboBox Grid.Row="4" Grid.Column="1" SelectedIndex="1"><ComboBoxItem>100%</ComboBoxItem><ComboBoxItem>125%（推荐）</ComboBoxItem><ComboBoxItem>150%</ComboBoxItem><ComboBoxItem>175%</ComboBoxItem><ComboBoxItem>200%</ComboBoxItem></ComboBox>
+                                    </Grid>
+                                    <TextBlock Text="排列、复制/扩展、方向和缩放请在 Windows 显示设置中调整。30fps 使用 60 Hz 显示模式。" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="0,12,0,0" />
+                                    <TextBlock x:Name="AppliedSettingsText" Text="Windows 实际模式：未连接" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                    <TextBlock x:Name="PendingSettingsText" Text="修改后点击应用设置。" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,8,0,0" />
+                                    <Button x:Name="DisplayApplyButton" Style="{StaticResource PrimaryButtonStyle}" Content="应用设置" Click="ApplySettings_Click" HorizontalAlignment="Right" Margin="0,12,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 画质与性能 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="画质与性能" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="选择一个预设，或根据设备能力调整视频参数。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="性能预设" Style="{StaticResource SectionTitleStyle}" />
+                                    <UniformGrid Columns="4">
+                                        <Border BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2" Background="#EFF9FE" CornerRadius="9" Padding="14" Margin="0,0,8,0"><StackPanel><RadioButton x:Name="PresetBalanced" Checked="PresetChanged" GroupName="Preset" IsChecked="True" Content="均衡（推荐）" FontWeight="SemiBold" /><TextBlock Text="60fps · 8 Mbps" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="22,8,0,0" /></StackPanel></Border>
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="14" Margin="4,0"><StackPanel><RadioButton x:Name="PresetLatency" Checked="PresetChanged" GroupName="Preset" Content="低延迟" FontWeight="SemiBold" /><TextBlock Text="120fps · 12 Mbps" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="22,8,0,0" /></StackPanel></Border>
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="14" Margin="4,0"><StackPanel><RadioButton x:Name="PresetQuality" Checked="PresetChanged" GroupName="Preset" Content="高清晰" FontWeight="SemiBold" /><TextBlock Text="60fps · 24 Mbps" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="22,8,0,0" /></StackPanel></Border>
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="14" Margin="8,0,0,0"><StackPanel><RadioButton x:Name="PresetPower" Checked="PresetChanged" GroupName="Preset" Content="省电" FontWeight="SemiBold" /><TextBlock Text="30fps · 6 Mbps" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="22,8,0,0" /></StackPanel></Border>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="视频参数" Style="{StaticResource SectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="编码器" VerticalAlignment="Center" /><ComboBox Grid.Row="0" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>自动选择硬件编码器</ComboBoxItem><ComboBoxItem>NVIDIA H.264 Encoder</ComboBoxItem><ComboBoxItem>软件回退</ComboBoxItem></ComboBox><TextBlock Grid.Row="0" Grid.Column="2" Text="当前：NVIDIA" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="14,0,0,0" />
+                                        <TextBlock Grid.Row="1" Text="编码格式" VerticalAlignment="Center" /><ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>H.264（推荐）</ComboBoxItem><ComboBoxItem IsEnabled="False">H.265（后续支持）</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="2" Text="目标码率" VerticalAlignment="Center" /><Grid Grid.Row="2" Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="70" /></Grid.ColumnDefinitions><Slider x:Name="TargetBitrateSlider" ValueChanged="BitrateChanged" Minimum="2" Maximum="50" Value="8" TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding Value, ElementName=TargetBitrateSlider, StringFormat={}{0:0} Mbps}" HorizontalAlignment="Right" VerticalAlignment="Center" /></Grid>
+                                        <TextBlock Grid.Row="3" Text="编码帧率上限" VerticalAlignment="Center" /><ComboBox x:Name="StreamFpsCombo" SelectionChanged="SettingsChoiceChanged" Grid.Row="3" Grid.Column="1" SelectedIndex="1"><ComboBoxItem>30 fps</ComboBoxItem><ComboBoxItem>60 fps</ComboBoxItem><ComboBoxItem>120 fps（实验性）</ComboBoxItem></ComboBox>
+                                        <TextBlock Grid.Row="4" Text="自动降级" VerticalAlignment="Center" /><CheckBox Grid.Row="4" Grid.Column="1" IsChecked="False" Content="自动降级尚未接入；可手动选择省电预设" />
+                                    </Grid>
+                                    <TextBlock x:Name="VideoTargetText" Text="编码目标：未连接。静态桌面不会持续产生满帧画面。" TextWrapping="Wrap" Margin="0,12,0,0" />
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0"><Button Style="{StaticResource SecondaryButtonStyle}" Content="恢复推荐值" Click="RestoreSettings_Click" Margin="0,0,8,0" /><Button x:Name="VideoApplyButton" Style="{StaticResource PrimaryButtonStyle}" Content="应用设置" Click="ApplySettings_Click" /></StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="GPU 捕获/转换" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="CaptureTimeText" Text="-- μs" FontSize="20" FontFamily="Consolas" Margin="0,6,0,0" /></StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="编码提交" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="EncodeTimeText" Text="-- μs" FontSize="20" FontFamily="Consolas" Margin="0,6,0,0" /></StackPanel>
+                                    <StackPanel Grid.Column="2"><TextBlock Text="零拷贝" Foreground="{StaticResource SecondaryTextBrush}" /><TextBlock x:Name="ZeroCopyText" Text="等待会话" FontSize="20" FontWeight="SemiBold" Margin="0,6,0,0" /></StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 输入 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="输入" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="控制平板触控、手势、软键盘和应急快捷键。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="允许平板控制电脑" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="关闭后仍显示画面，但不接受任何触控或键盘输入。" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,5,0,0" /></StackPanel>
+                                    <CheckBox x:Name="TouchEnabledBox" Checked="TouchEnabledChanged" Unchecked="TouchEnabledChanged" Grid.Column="1" IsChecked="True" Content="允许原生触控" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="输入模式" Style="{StaticResource SectionTitleStyle}" />
+                                    <RadioButton GroupName="InputMode" IsChecked="True" Content="原生触控 — 手指位置与副屏内容绝对对应" Margin="0,6" />
+                                    <RadioButton GroupName="InputMode" Content="触控板 — 像笔记本触控板一样控制鼠标" Margin="0,6" />
+                                    <RadioButton GroupName="InputMode" Content="仅显示 — 完全停止输入回传" Margin="0,6" />
+                                </StackPanel>
+                            </Border>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                                    <StackPanel><TextBlock Text="手势" Style="{StaticResource SectionTitleStyle}" /><CheckBox IsChecked="True" Content="单指点击和拖动" /><CheckBox IsChecked="True" Content="双指滚动" /><CheckBox IsChecked="True" Content="自然滚动方向" /><CheckBox IsChecked="True" Content="双指缩放" /><CheckBox IsChecked="True" Content="长按执行右键" /></StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                                    <StackPanel><TextBlock Text="键盘" Style="{StaticResource SectionTitleStyle}" /><CheckBox IsChecked="True" Content="显示平板软键盘按钮" /><CheckBox Content="点击文本框时自动弹出" /><CheckBox IsChecked="True" Content="回传平板物理键盘" /><TextBlock Text="系统安全组合键可能受 Windows 限制。" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="0,10,0,0" /></StackPanel>
+                                </Border>
+                            </Grid>
+                            <Border Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="坐标与应急操作" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="触控偏移、旋转错误或鼠标停留在副屏时使用。" Foreground="{StaticResource SecondaryTextBrush}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Style="{StaticResource SecondaryButtonStyle}" Content="校准触控" Margin="0,0,8,0" IsEnabled="False" ToolTip="此功能尚未接入" /><Button Style="{StaticResource PrimaryButtonStyle}" Content="鼠标回主屏" Click="ReturnCursor_Click" /></StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 设备 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="设备" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="查看通过 USB 发现的平板、授权状态和开发连接方式。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="70" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Border Width="54" Height="54" CornerRadius="12" Background="#E7F7FE" VerticalAlignment="Top"><TextBlock Text="&#xE70A;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock x:Name="DeviceNameText" Text="未检测到 Android 平板" FontSize="18" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="DeviceDetailsText" Text="请连接支持数据传输的 USB 线" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,5,0,0" />
+                                        <WrapPanel Margin="0,12,0,0"><Border Background="#EEF2F6" CornerRadius="10" Padding="10,4" Margin="0,0,8,0"><TextBlock x:Name="UsbModeText" Text="USB：等待设备" FontSize="12" /></Border><Border Background="#EEF2F6" CornerRadius="10" Padding="10,4"><TextBlock x:Name="PairingText" Text="开发模式" FontSize="12" /></Border></WrapPanel>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center"><Button Style="{StaticResource SecondaryButtonStyle}" Content="刷新设备" Click="RefreshButton_Click" Margin="0,0,0,8" /><Button Style="{StaticResource SecondaryButtonStyle}" Content="忘记设备" IsEnabled="False" /></StackPanel>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel><TextBlock Text="连接偏好" Style="{StaticResource SectionTitleStyle}" /><CheckBox IsChecked="True" Content="检测到这台平板后自动连接" /><CheckBox IsChecked="True" Content="仅在平板已解锁时连接" /><CheckBox IsChecked="True" Content="断线后自动重连" /></StackPanel>
+                            </Border>
+                            <Border Background="#FFF8E8" BorderBrush="#F2D693" BorderThickness="1" CornerRadius="10" Padding="16">
+                                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}" FontSize="20" Margin="0,0,12,0" /><StackPanel><TextBlock Text="当前使用 ADB 开发连接" FontWeight="SemiBold" /><TextBlock Text="正式版将使用不需要 USB 调试的产品化 USB 通道。" Foreground="#7A6840" Margin="0,4,0,0" /></StackPanel></StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 诊断 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <Grid Margin="0,0,0,22">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock Text="诊断" Style="{StaticResource PageTitleStyle}" /><TextBlock Text="逐步检查驱动、USB、视频和输入通道。" Foreground="{StaticResource SecondaryTextBrush}" /></StackPanel>
+                                <Button Grid.Column="1" x:Name="RunDiagnosticsButton" Style="{StaticResource PrimaryButtonStyle}" Content="开始连接测试" Click="TestConnection_Click" VerticalAlignment="Center" />
+                            </Grid>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="连接测试" Style="{StaticResource SectionTitleStyle}" />
+                                    <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions><TextBlock x:Name="DiagServiceIcon" Text="●" Foreground="#9AA6B2" FontSize="18" /><TextBlock Grid.Column="1" Text="Windows 控制器" FontWeight="SemiBold" /><TextBlock x:Name="DiagServiceText" Grid.Column="2" Text="等待测试" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" /></Grid>
+                                    <Separator Margin="0,8" />
+                                    <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions><TextBlock x:Name="DiagDriverIcon" Text="●" Foreground="#9AA6B2" FontSize="18" /><TextBlock Grid.Column="1" Text="虚拟显示驱动" FontWeight="SemiBold" /><TextBlock x:Name="DiagDriverText" Grid.Column="2" Text="等待测试" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" /></Grid>
+                                    <Separator Margin="0,8" />
+                                    <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions><TextBlock x:Name="DiagUsbIcon" Text="●" Foreground="#9AA6B2" FontSize="18" /><TextBlock Grid.Column="1" Text="USB / ADB 设备" FontWeight="SemiBold" /><TextBlock x:Name="DiagUsbText" Grid.Column="2" Text="等待测试" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" /></Grid>
+                                    <Separator Margin="0,8" />
+                                    <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions><TextBlock x:Name="DiagVideoIcon" Text="●" Foreground="#9AA6B2" FontSize="18" /><TextBlock Grid.Column="1" Text="视频编码与连接" FontWeight="SemiBold" /><TextBlock x:Name="DiagVideoText" Grid.Column="2" Text="等待测试" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" /></Grid>
+                                    <Separator Margin="0,8" />
+                                    <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions><TextBlock x:Name="DiagInputIcon" Text="●" Foreground="#9AA6B2" FontSize="18" /><TextBlock Grid.Column="1" Text="触控输入通道" FontWeight="SemiBold" /><TextBlock x:Name="DiagInputText" Grid.Column="2" Text="等待测试" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" /></Grid>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <Grid><TextBlock Text="诊断摘要" Style="{StaticResource SectionTitleStyle}" /><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Style="{StaticResource SecondaryButtonStyle}" Content="复制摘要" Click="CopyDiagnostics_Click" Margin="0,0,8,0" /><Button Style="{StaticResource SecondaryButtonStyle}" Content="打开日志目录" Click="OpenLogFolder_Click" /></StackPanel></Grid>
+                                    <TextBox x:Name="DiagnosticsText" Text="尚未运行连接测试。" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="100" Padding="12" Background="#F6F8FA" BorderBrush="{StaticResource BorderBrush}" VerticalScrollBarVisibility="Auto" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 设置 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="设置" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="配置应用启动、窗口行为、通知和外观。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="启动与连接" Style="{StaticResource SectionTitleStyle}" /><CheckBox IsChecked="True" Content="登录 Windows 后启动 USB Tablet Display" /><CheckBox IsChecked="True" Content="检测到上次的平板后自动连接" /><CheckBox IsChecked="True" Content="关闭窗口时保持后台连接" /></StackPanel></Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel><TextBlock Text="外观与通知" Style="{StaticResource SectionTitleStyle}" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="50" /></Grid.RowDefinitions><TextBlock Text="主题" VerticalAlignment="Center" /><ComboBox Grid.Column="1" SelectedIndex="0"><ComboBoxItem>跟随 Windows</ComboBoxItem><ComboBoxItem>浅色</ComboBoxItem><ComboBoxItem>深色</ComboBoxItem></ComboBox><TextBlock Grid.Row="1" Text="语言" VerticalAlignment="Center" /><ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="0"><ComboBoxItem>简体中文</ComboBoxItem><ComboBoxItem>English</ComboBoxItem></ComboBox></Grid><CheckBox IsChecked="True" Content="连接和断线时显示系统通知" /><CheckBox IsChecked="True" Content="自动降级时显示一次通知" /></StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="重置" Style="{StaticResource SectionTitleStyle}" /><TextBlock Text="恢复所有显示、性能和输入设置的默认值。配对设备不会被删除。" Foreground="{StaticResource SecondaryTextBrush}" /></StackPanel><Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="恢复默认设置" VerticalAlignment="Center" IsEnabled="False" ToolTip="此功能尚未接入" /></Grid></Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 关于 -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24">
+                            <TextBlock Text="关于" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock Text="版本、组件和项目状态。" Style="{StaticResource PageDescriptionStyle}" />
+                            <Border Style="{StaticResource CardStyle}" Padding="28">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <Image Source="Assets/tablet-display-icon.png" Width="100" Height="100" Stretch="Uniform" />
+                                    <TextBlock Text="USB Tablet Display" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                                    <TextBlock Text="桌面应用 0.2.5 · 开发预览版" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" Margin="0,5,0,0" />
+                                    <TextBlock Text="让 Android 平板成为 Windows 的 USB 扩展显示器" HorizontalAlignment="Center" Margin="0,18,0,0" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel><TextBlock Text="组件版本" Style="{StaticResource SectionTitleStyle}" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="34" /><RowDefinition Height="34" /><RowDefinition Height="34" /><RowDefinition Height="34" /></Grid.RowDefinitions><TextBlock Text="Windows 桌面应用" /><TextBlock Grid.Column="1" Text="0.2.5" FontFamily="Consolas" /><TextBlock Grid.Row="1" Text="Windows 控制器" /><TextBlock Grid.Row="1" Grid.Column="1" Text="0.2.5" FontFamily="Consolas" /><TextBlock Grid.Row="2" Text="Android 客户端" /><TextBlock Grid.Row="2" Grid.Column="1" Text="0.2.5" FontFamily="Consolas" /><TextBlock Grid.Row="3" Text="视频/输入协议" /><TextBlock Grid.Row="3" Grid.Column="1" Text="v1 / v1" FontFamily="Consolas" /></Grid></StackPanel>
+                            </Border>
+                            <TextBlock Text="当前版本继续使用 ADB 作为开发传输通道，不代表正式产品连接方案。" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+
+            <Border Grid.Row="2" Background="#E8EDF3" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+                <Grid Margin="14,0"><TextBlock x:Name="FooterStatusText" Text="准备就绪" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" /><TextBlock Text="开发连接：ADB · 视频端口 27183 · 输入端口 27184" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" /></Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

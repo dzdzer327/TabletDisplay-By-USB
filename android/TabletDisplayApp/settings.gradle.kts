@@ -29,5 +29,5 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "Tablet Display"
+rootProject.name = "USB Tablet Display"
 include(":app")

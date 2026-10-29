@@ -18,5 +18,5 @@ foreach ($requiredPath in @($project, $msbuild)) {
 
 & $msbuild $project '/m' "/p:Configuration=$Configuration" '/p:Platform=x64' '/verbosity:minimal'
 if ($LASTEXITCODE -ne 0) {
-    throw "Tablet Display controller build failed with exit code $LASTEXITCODE"
+    throw "USB Tablet Display controller build failed with exit code $LASTEXITCODE"
 }

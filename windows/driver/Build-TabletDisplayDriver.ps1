@@ -29,7 +29,7 @@ try {
 
     & $msbuild $project '/m' "/p:Configuration=$Configuration" '/p:Platform=x64' '/verbosity:minimal' "/p:TabletDisplayWdkRoot=$WdkRoot\"
     if ($LASTEXITCODE -ne 0) {
-        throw "Tablet Display driver build failed with exit code $LASTEXITCODE"
+        throw "USB Tablet Display driver build failed with exit code $LASTEXITCODE"
     }
 }
 finally {

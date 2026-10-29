@@ -1,136 +1,88 @@
-# Tablet Display
+# USB Tablet Display · USB 平板扩展屏
 
-Windows 10/11 通过 USB 连接 Android 平板的有线扩展显示器项目。
+一根 USB 数据线，让 Android 平板成为 Windows 的第二块屏幕。
 
-当前原型已打通 Windows 虚拟扩展屏、DXGI 抓屏、D3D11 零拷贝硬件 H.264 编码、ADB/USB 传输、Android `MediaCodec` 硬解显示及原生触控回传。开发连接仍使用 ADB；软键盘和产品化 USB 通道尚未完成。
+不是把主屏再复制一遍：你可以在电脑上写代码，在平板上放文档、浏览器或聊天窗口，两块屏幕各做各的事。也可以直接点按、拖拽平板上的 Windows 窗口。
 
-## 当前结构
+**[下载 v0.2.5](https://github.com/dzdzer327/TabletDisplay-By-USB/releases/tag/v0.2.5)** · [快速上手](#快速上手) · [效果截图](#效果截图) · [反馈问题](https://github.com/dzdzer327/TabletDisplay-By-USB/issues)
 
-- `windows/driver/TabletDisplayDriver/`：本项目的独立 Windows 间接显示驱动工程。
-- `windows/driver/upstream/`：Microsoft IddSample 上游验证样例，只用于参考和回归对照。
-- `android/TabletDisplayApp/`：Android 10+ 平板客户端工程。
-- `android/*.ps1`：Android 环境检查与 APK 构建入口。
-- `docs/`：阶段验收条件、调试和测试记录。
-- `需求分析/`：原始需求说明。
+## 能做什么
 
-产品化桌面端、平板端、设置与诊断界面的完整规格见 [产品需求与双端界面规格](docs/product-requirements-and-ui-spec.md)。
+- **真正的扩展桌面**：窗口可以跨屏拖动，屏幕位置、主副屏、缩放与方向通过 Windows 显示设置调整。
+- **USB 有线连接**：无需连接 Wi-Fi，电脑端提供启动、停止和连接诊断界面。
+- **平板直接操作电脑**：支持原生触控点按、拖拽，以及“仅显示、不接收触控”。
+- **按设备调整画质**：支持 720p、1080p、1920×1200、2560×1600，30/60/120fps 编码上限和 2～50 Mbps 码率。
+- **硬件视频链路**：Windows 硬件 H.264 编码，Android 硬解；支持 D3D11 零拷贝路径。
+- **自动同步平板应用**：首次连接可安装配套 APK，后续按需升级，不必每次重装。
 
-## 开发机要求
+## 效果截图
 
-当前开发机已验证以下环境可用：
+### 电脑端：在界面中调整画质与帧率
 
-1. Visual Studio 2022（C++ 桌面开发工作负载）。
-2. Windows SDK 10.0.26100。
-3. WDK 10.0.26100.6584。
-4. Microsoft OpenJDK 17。
-5. Android SDK Platform 36、Build Tools 36.0.0 与 Platform Tools/ADB 37.0.1。
+![Windows 桌面端画质与性能设置](docs/images/windows-settings.jpg)
 
-由于当前 Visual Studio 实例没有提供 WDK VSIX 项目模板，本仓库通过 `windows/driver/LocalWdkToolset.props` 在项目级显式引用 UMDF 与 IddCx 构建依赖；不修改 Visual Studio 或 Windows Kits 安装目录。
+### 平板端：真实 USB 画面传输
 
-不要在日常主力机上启用测试签名或加载未签名驱动。
+下图为华为平板接收 Windows 副屏测试画面的真实截图，不是效果示意图。
 
-## 构建驱动
+![平板横屏显示 Windows 副屏的动态测试图案](docs/images/tablet-landscape.png)
 
-在已安装 WDK 的测试机上，以 PowerShell 执行：
+横向副屏内容在竖向平板上会等比居中，不拉伸；黑边区域不会误触电脑。
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\windows\driver\Get-IddSample.ps1
-```
+<img src="docs/images/tablet-portrait.png" alt="竖屏等比显示与上下黑边" width="320" />
 
-以 PowerShell 运行以下命令即可生成 WPP 追踪头文件并构建项目的 `Debug|x64` 驱动：
+## 下载哪个文件
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\windows\driver\Build-TabletDisplayDriver.ps1
-```
+在 [Releases](https://github.com/dzdzer327/TabletDisplay-By-USB/releases/tag/v0.2.5) 下载：
 
-构建产物位于 `windows/driver/TabletDisplayDriver/x64/Debug/TabletDisplayDriver.dll`。首期支持一台名为 **Tablet Display** 的虚拟显示器，并提供 1280×720、1920×1080、1920×1200、2560×1600 的 60Hz 模式。
+| 文件 | 用途 |
+| --- | --- |
+| `TabletDisplay-Windows-x64-v0.2.5-Setup.exe` | **推荐**：Windows 统一安装器，内置 ADB、运行库、显示驱动和配套 APK |
+| `TabletDisplay-Android-v0.2.5.apk` | 平板端单独安装或手动更新备用 |
+| `TabletDisplay-TestKit-v0.2.5.zip` | 含安装器、APK 和中文教程，适合整包带到另一台电脑 |
+| `SHA256SUMS.txt` | 核对下载文件完整性 |
 
-在测试机上部署前，仍需准备测试签名并安装驱动；这会改变 Windows 的安全启动/驱动加载状态，因此不会自动执行。
+普通使用不需要安装 Visual Studio、WDK、Java 或 Android SDK。不要下载源码 ZIP 来代替安装包。
 
-## 生成开发驱动包
+## 快速上手
 
-以下命令会重新编译驱动、同步 INF/DLL，并生成未签名 CAT：
+### 1. 安装电脑端
 
-```powershell
-.\windows\driver\Build-DriverPackage.ps1
-```
+双击 Windows 安装器，允许管理员授权，按提示完成安装；如提示重启，先重启。随后打开桌面的 **USB Tablet Display**。
 
-开发测试证书和 CAT 签名分别通过以下脚本生成：
+### 2. 连接平板
 
-```powershell
-.\windows\driver\New-TestSigningCertificate.ps1
-.\windows\driver\Sign-DriverPackage.ps1
-```
+在平板上开启“开发者选项 → USB 调试”，用支持数据传输的 USB 线连接电脑。在平板弹出的调试授权中，确认是自己的电脑后允许，并保持平板解锁。
 
-已验证的签名包位于 `windows/driver/package/Debug-x64/`。测试证书私钥只保存在当前 Windows 用户的个人证书库，不导出到仓库；`windows/driver/certificates/` 仅保存可以公开分发的 `.cer` 公钥证书。
+### 3. 启动扩展屏
 
-`Enable-TestSigning.ps1` 与 `Install-TestDriver.ps1` 会改变 Windows 启动配置和系统证书/驱动仓库，只应在明确同意后的管理员 PowerShell 中运行。
+在电脑端点击 **启动扩展屏**。程序会检查、按需安装或更新平板应用，然后打开接收画面。部分平板需要额外确认 USB 安装，请留意平板提示。
 
-测试结束后的回滚入口为 `Uninstall-TestDriver.ps1` 和 `Disable-TestSigning.ps1`：先退出控制程序并卸载测试驱动，再关闭测试签名，最后重启 Windows。
+### 4. 把窗口拖到平板
 
-只进行本机证书信任和驱动包完整性验证（不安装驱动、不修改启动配置）时，先以管理员身份运行 `Trust-LocalTestCertificate.ps1`，再运行 `Verify-DriverPackage.ps1`。验证会检查 CAT 的 Authenticode 签名，并确认 INF 与 DLL 都是该 CAT 中未被篡改的成员。
+打开 Windows **设置 → 系统 → 显示**，选择 **扩展这些显示器**，按真实摆放位置排列两块屏幕。将窗口从相接的屏幕边缘拖过去，就能在两块屏幕上显示不同内容。
 
-本机信任验证通过后，可在保持 Secure Boot 和正常启动配置不变的情况下，以管理员身份运行 `Install-LocalTrustedDriver.ps1`。该脚本先重复完整性验证，再通过 PnPUtil 将驱动包加入 Windows 驱动仓库；它不会创建显示设备，设备由 `TabletDisplayController.exe` 单独控制。
+应用通常仍在主屏或上次关闭的位置打开，这不代表副屏不能运行应用。也可以用快捷键：
 
-开发中需要替换已经预置的 Tablet Display 包时，使用管理员权限运行 `Update-LocalTrustedDriver.ps1`。它只查找 Provider 为 `Tablet Display Project` 的旧包，先卸载这些包再调用本机可信安装脚本，不处理其他显示驱动。
+- `Ctrl + Alt + →`：将当前窗口移到平板。
+- `Ctrl + Alt + ←`：将当前窗口移回主屏。
+- `Ctrl + Alt + Home`：将鼠标召回主屏。
 
-## 构建虚拟设备控制程序
+### 5. 调整体验
 
-```powershell
-.\windows\controller\Build-TabletDisplayController.ps1
-```
+先使用默认的 **60fps / 8 Mbps**。需要更流畅时，选择 **120fps** 并点击 **应用设置**，程序会同时请求 Windows 副屏 120Hz；画面会短暂重连。停止使用时点击 **停止扩展屏**。
 
-输出为 `windows/controller/TabletDisplayController/x64/Debug/TabletDisplayController.exe`。驱动成功安装后，运行该程序会创建并保持 Tablet Display 软件设备；按 `X` 退出后设备被移除。
+120fps 是实验上限，不是所有设备的保证值。本机短时测试的 Windows 编码采样达到 118～120fps，平板实际呈现还受设备刷新率、解码性能和省电策略影响。
 
-连接并授权平板后，可从仓库根目录启动整个开发原型：
+## 使用要求与常见问题
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\windows\controller\Start-TabletDisplayPrototype.ps1
-```
+- **设备要求**：Windows 10 22H2 / Windows 11 x64、Android 10+、一根数据线；当前一次连接一台平板。
+- **看不到平板**：确认 USB 调试已授权，尝试“文件传输”模式、更换数据线或接口；部分品牌还需要厂商 ADB USB 驱动。
+- **平板等待画面**：确认 Windows 已启用扩展显示；尝试在电脑端停止后重新启动连接。
+- **鼠标跨屏方向不对**：在 Windows 显示设置中调整屏幕排列，或用上面的召回快捷键。
+- **性能不足或画面异常**：先降到 1920×1080 / 60fps，再逐步提高设置。
+- **如何卸载**：先停止扩展屏，再到 Windows“已安装的应用”中卸载；平板应用在 Android 上单独卸载。
 
-允许弹出的管理员提示后，Windows 会出现第二块扩展屏。应用通常仍在主屏或上次关闭的位置打开，可先选中应用窗口再使用：
+> 当前为开发预览版：需要 USB 调试与管理员授权，驱动使用项目开发证书，安装器会导入相应证书信任。仅安装你信任的来源。不支持音频、无线连接、软键盘文本回传、HDR 或受保护视频；尚未完成干净电脑与 8 小时稳定性验收。
 
-- `Ctrl+Alt+Right`：把当前窗口移到 Tablet Display。
-- `Ctrl+Alt+Left`：把当前窗口移回主屏。
-- `Ctrl+Alt+Home`：把看不见的鼠标光标送回主屏中央。
-
-平板直接显示视频流中的 Windows 系统鼠标；触摸平板则通过独立回传通道注入 Windows Touch。
-
-详细的成功判定、回滚和记录格式见 [阶段一清单](docs/phase-1-idd-validation.md)。
-
-## 检查 Android 环境
-
-重新打开 VS Code 或 PowerShell 后，在仓库根目录运行：
-
-```powershell
-.\android\Check-AndroidEnvironment.ps1
-```
-
-脚本会验证 JDK、Android SDK、ADB、编译平台，并列出当前通过 USB 连接的 Android 设备。当前客户端最低支持 API 29（Android 10），编译和目标 API 为 36。
-
-## 构建 Android 客户端
-
-```powershell
-.\android\Build-TabletDisplayApp.ps1
-```
-
-Debug APK 输出到 `android/TabletDisplayApp/app/build/outputs/apk/debug/app-debug.apk`。Gradle 缓存、`local.properties`、构建目录和 APK 已由 Android 工程的 `.gitignore` 排除，不应提交到 Git。
-
-连接并授权一台 Android 平板后，可一键构建、覆盖安装、建立 ADB 视频及触控端口映射并启动应用：
-
-```powershell
-.\android\Deploy-TabletDisplayApp.ps1
-```
-
-Android 应用会全屏显示并在设备回环地址 `127.0.0.1:27183` 等待 H.264 视频流。开发协议见 [Android 视频流协议](docs/android-video-protocol.md)。
-
-## 许可与来源
-
-上游样例来自 Microsoft 的 Windows Driver Samples 仓库，其许可证会随下载的源码保留。TabletDisplayDriver 当前从该样例的 IddCx 生命周期和交换链结构演进而来，后续会继续替换样例化的设备发现、帧处理和会话逻辑。
-一键启动
-cd 'D:\wk\kuo view'
-Set-ExecutionPolicy -Scope Process Bypass
-.\windows\driver\Build-TabletDisplayDriver.ps1
+更详细的 [安装与试用教程](docs/other-pc-quickstart.md)、[版本修复记录](docs/fixes-and-verification-v0.2.5.md) 和 [开发构建说明](docs/development-guide.md) 可在文档中查看。

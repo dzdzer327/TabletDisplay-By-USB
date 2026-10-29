@@ -48,7 +48,7 @@ foreach ($packageMember in @($infPath, $dllPath)) {
     }
 }
 
-Write-Host 'Tablet Display driver package security and integrity verification passed.'
+Write-Host 'USB Tablet Display driver package security and integrity verification passed.'
 [pscustomobject]@{
     CatalogSigner = $catalogSignature.SignerCertificate.Subject
     CertificateThumbprint = $certificate.Thumbprint

@@ -40,10 +40,10 @@ $installedPackage = Get-WindowsDriver -Online -All |
     Select-Object -First 1
 
 if ($null -eq $installedPackage) {
-    throw 'PnPUtil returned success, but the Tablet Display package was not found in the driver store.'
+    throw 'PnPUtil returned success, but the USB Tablet Display package was not found in the driver store.'
 }
 
-Write-Host 'Tablet Display driver package is present in the Windows driver store.'
+Write-Host 'USB Tablet Display driver package is present in the Windows driver store.'
 [pscustomobject]@{
     PublishedName = $installedPackage.Driver
     Provider = $installedPackage.ProviderName
